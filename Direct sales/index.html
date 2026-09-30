@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xBloom Direct Sales Recorder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { background-color: #f8fafc; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .glass-panel { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.2); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useMemo, useEffect, Fragment } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+          Settings, Save, RefreshCw, Send, Check, Calendar, Box, 
+          Coffee, List, MapPin, Search, ChevronDown, Store, AlertCircle, Trash2, X, Smartphone, Package, Palette
+        } from 'https://esm.sh/lucide-react@0.359.0?deps=react@18.2.0';
+
+        // --- Helper Functions ---
+        const parseCSV = (csvText) => {
+          const rows = []; let row = []; let cur = ''; let inQuotes = false;
+          for (let i = 0; i < csvText.length; i++) {
+            const char = csvText[i];
+            if (char === '"') { inQuotes = !inQuotes; } 
+            else if (char === ',' && !inQuotes) { row.push(cur); cur = ''; } 
+            else if ((char === '\n' || char === '\r') && !inQuotes) {
+              if (char === '\r') continue;
+              row.push(cur); rows.push(row); row = []; cur = '';
+            } else { cur += char; }
+          }
+          if (cur !== '' || row.length > 0) { row.push(cur); rows.push(row); }
+          if (rows.length === 0) return [];
+          
+          let headerIndex = 0;
+          for (let i = 0; i < Math.min(10, rows.length); i++) {
+            const rowString = rows[i].join('').toLowerCase();
+            if (rowString.includes('product name') || rowString.includes('ชื่อสินค้า')) { headerIndex = i; break; }
+          }
+
+          const headers = rows[headerIndex].map(h => h.replace(/^"|"$/g, '').trim());
+          return rows.slice(headerIndex + 1).filter(r => r.length > 0 && r.some(cell => cell.trim() !== '')).map(r => {
+            const obj = {};
+            headers.forEach((h, i) => { if (h) obj[h] = r[i] !== undefined ? r[i].replace(/^"|"$/g, '').trim() : ''; });
+            return obj;
+          });
+        };
+
+        const findValue = (row, keys) => {
+          const lowerKeys = keys.map(k => k.toLowerCase().trim());
+          const rowKeys = Object.keys(row);
+          for (let k of rowKeys) { 
+              const cleanK = k.toLowerCase().replace(/[\n\r]/g, '').trim();
+              if (lowerKeys.includes(cleanK)) return row[k]; 
+          }
+          return '';
+        };
+
+        // --- Components ---
+        const SearchableSelect = ({ options, name, value, onChange, placeholder, isLoading }) => {
+            const [isOpen, setIsOpen] = useState(false);
+            const [searchTerm, setSearchTerm] = useState(value);
+            const wrapperRef = React.useRef(null);
+
+            useEffect(() => { setSearchTerm(value); }, [value]);
+
+            useEffect(() => {
+                const handleClickOutside = (event) => { if (wrapperRef.current && !wrapperRef.current.contains(event.target)) setIsOpen(false); };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, []);
+
+            const filteredOptions = options.filter(opt => opt.label.toLowerCase().includes(searchTerm.toLowerCase()));
+
+            return (
+                <div ref={wrapperRef} className="relative w-full">
+                    <div className="relative flex items-center">
+                        <Search className="absolute left-4 w-4 h-4 text-slate-400" />
+                        <input
+                            type="text" name={name} value={searchTerm}
+                            onChange={(e) => { setSearchTerm(e.target.value); setIsOpen(true); onChange({ target: { name, value: e.target.value } }); }}
+                            onFocus={() => setIsOpen(true)} placeholder={isLoading ? "Loading catalog..." : placeholder} disabled={isLoading}
+                            className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-10 py-3.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-sm disabled:bg-slate-50 disabled:cursor-not-allowed"
+                            autoComplete="off" required
+                        />
+                        <div className="absolute right-0 top-0 h-full px-3 flex items-center cursor-pointer" onClick={() => !isLoading && setIsOpen(!isOpen)}>
+                            {isLoading ? <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" /> : <ChevronDown className="w-4 h-4 text-slate-500 hover:text-slate-800" />}
+                        </div>
+                    </div>
+                    {isOpen && (
+                        <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-[280px] overflow-y-auto custom-scrollbar">
+                            {filteredOptions.length > 0 ? (
+                                filteredOptions.map((opt, idx) => (
+                                    <div key={idx} className="px-5 py-3 text-sm font-bold text-slate-700 hover:bg-purple-50 hover:text-purple-700 cursor-pointer border-b border-slate-50 last:border-0 transition-colors"
+                                        onMouseDown={(e) => { e.preventDefault(); setSearchTerm(opt.value); onChange({ target: { name, value: opt.value } }); setIsOpen(false); }}
+                                    >
+                                        {opt.label}
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="px-5 py-4 text-sm text-slate-400 italic text-center">ไม่พบสินค้าในแคตตาล็อก... (สามารถพิมพ์ชื่อใหม่ได้เลย)</div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const App = () => {
+            // State
+            const [activeTab, setActiveTab] = useState('pos'); // 'pos' or 'stock'
+            const [catalogData, setCatalogData] = useState([]);
+            const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+            const [recentEntries, setRecentEntries] = useState([]);
+            const [showSettings, setShowSettings] = useState(false);
+            
+            // Inventory State (Saved locally)
+            const [inventory, setInventory] = useState(() => {
+                const saved = localStorage.getItem('xbloom_recorder_inventory');
+                return saved ? JSON.parse(saved) : {};
+            });
+
+            useEffect(() => {
+                localStorage.setItem('xbloom_recorder_inventory', JSON.stringify(inventory));
+            }, [inventory]);
+            
+            const [settings, setSettings] = useState(() => {
+                const saved = localStorage.getItem('xbloom_recorder_settings');
+                return saved ? JSON.parse(saved) : {
+                    apiUrl: '', // GAS Web App URL
+                    catalogUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-0j7hcN58jZGN8ojYoL5nUF7IK7tIiKrVi3QOkrkTmwh9Sqr5qiOuTh7R5VyRas8bhNTfg7jeHMQ7/pub?gid=0&single=true&output=csv'
+                };
+            });
+
+            const initialFormState = {
+                date: new Date().toISOString().split('T')[0],
+                productName: '', roaster: '', type: '', color: 'ไม่มี/ไม่ระบุ', packaging: 'None', 
+                category: 'Other', gmv: '', sales: '',
+                channel: 'หน้าร้าน', campaign: 'BAU'
+            };
+            const [formData, setFormData] = useState(initialFormState);
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [statusMsg, setStatusMsg] = useState({ type: '', msg: '' });
+
+            // Load Catalog
+            useEffect(() => {
+                const fetchCatalog = async () => {
+                    if (!settings.catalogUrl) return;
+                    setIsLoadingCatalog(true);
+                    try {
+                        const res = await fetch(settings.catalogUrl);
+                        if (res.ok) {
+                            const text = await res.text();
+                            setCatalogData(parseCSV(text));
+                        }
+                    } catch (e) { console.error('Failed to fetch catalog', e); }
+                    setIsLoadingCatalog(false);
+                };
+                fetchCatalog();
+            }, [settings.catalogUrl]);
+
+            const productOptions = useMemo(() => {
+                if (!catalogData) return [];
+                return catalogData.map(item => {
+                    const name = findValue(item, ['Product Name', 'ชื่อสินค้า', 'Item Name', 'Name', 'สินค้า']);
+                    const roaster = findValue(item, ['Roaster', 'โรงคั่ว']);
+                    if (!name) return null;
+                    return { label: roaster ? `[${roaster}] ${name}` : name, value: name };
+                }).filter(Boolean);
+            }, [catalogData]);
+
+            // สร้างรายการ SKU ทั้งหมดสำหรับจัดการ Stock โดยอ้างอิงจาก Catalog และ Packaging เริ่มต้น
+            const allSKUs = useMemo(() => {
+                const skus = [];
+                if (catalogData) {
+                    catalogData.forEach(item => {
+                        const name = findValue(item, ['Product Name', 'ชื่อสินค้า', 'Item Name', 'Name', 'สินค้า']);
+                        if (!name) return;
+                        
+                        let pkg = 'None';
+                        const typeRaw = findValue(item, ['Type', 'ชนิด', 'รูปแบบ', 'Product Type']) || '';
+                        let catRaw = findValue(item, ['Category', 'หมวดหมู่', 'Group']);
+                        if (!catRaw) catRaw = findValue(item, ['Type', 'ประเภท', 'กลุ่มสินค้า', 'Product Type']) || '';
+                        
+                        // กรองหา Category แบบเดียวกับที่ทำใน POS
+                        let cat = 'Other';
+                        const valLower = name.toLowerCase().trim();
+                        const accessoryKw = ['accessory', 'accessories', 'equipment', 'merch', 'apparel', 'gear', 'อุปกรณ์', 'ของแต่ง', 'filter', 'paper', 'กระดาษ', 'กรอง', 'แก้ว', 'เหยือก', 'scale', 'ตาชั่ง', 'ชั่ง', 'kettle', 'กา', 'dripper', 'ดริป', 'server', 'tote', 'bag', 'ถุง', 'pin', 'เข็มกลัด', 'เสื้อ', 'cup', 'glass', 'carafe', 'brush', 'แปรง', 'dosing', 'mat', 'แผ่น', 'tamper', 'แทม', 'pitcher', 'พิชเชอร์', 'พิทเชอร์', 'เคาะ', 'clean', 'ล้าง', 'ผ้า', 'พวงกุญแจ', 'keychain'];
+                        const studioKw = ['studio', 'machine', 'เครื่องชง', 'เครื่องบด', 'grinder', 'omni'];
+                        const coffeeKw = ['xpod', 'bean', 'เมล็ด', 'blend', 'roast', 'คั่ว', 'coffee', 'กาแฟ', 'sachet', 'ซอง', 'drip', 'gesha', 'geisha', 'ethiopia', 'colombia', 'brazil', 'kenya', 'panama', 'costa rica'];
+
+                        if (studioKw.some(k => valLower.includes(k))) cat = 'xBloom Studio';
+                        else if (accessoryKw.some(k => valLower.includes(k))) cat = 'Accessories';
+                        else if (coffeeKw.some(k => valLower.includes(k))) cat = 'xPod and beans';
+
+                        if (catRaw && catRaw.trim() !== '') {
+                            cat = catRaw.trim();
+                        } else if (typeRaw && typeRaw.trim() !== '') {
+                            const typeLower = typeRaw.toLowerCase().trim();
+                            if (typeLower === 'accessories' || typeLower === 'accessory' || typeLower === 'equipment' || accessoryKw.some(k => typeLower.includes(k))) {
+                                cat = 'Accessories';
+                            } else if (typeLower === 'xbloom studio' || typeLower === 'machine' || typeLower === 'เครื่องชง' || studioKw.some(k => typeLower.includes(k))) {
+                                cat = 'xBloom Studio';
+                            } else if (typeLower === 'xpod and beans' || typeLower === 'beans' || typeLower === 'coffee' || typeLower === 'กาแฟ' || typeLower === 'เมล็ด' || coffeeKw.some(k => typeLower.includes(k))) {
+                                cat = 'xPod and beans';
+                            }
+                        }
+                        if (cat === 'Other' && findValue(item, ['Roaster', 'โรงคั่ว'])) {
+                            cat = 'xPod and beans';
+                        }
+
+                        const exactPkg = findValue(item, ['Packaging', 'แพ็กเกจ', 'บรรจุภัณฑ์']);
+                        if (exactPkg && exactPkg.trim() !== '') {
+                            pkg = exactPkg.trim();
+                        } else {
+                            const checkStr = (typeRaw + ' ' + catRaw).toLowerCase();
+                            if (checkStr.includes('studio') || checkStr.includes('machine') || checkStr.includes('accessory') || checkStr.includes('equipment') || checkStr.includes('อุปกรณ์') || checkStr.includes('แก้ว') || checkStr.includes('paper') || checkStr.includes('filter') || cat === 'Accessories' || cat === 'xBloom Studio') {
+                                pkg = 'None';
+                            } else if (checkStr.includes('xpod')) {
+                                pkg = 'xPod';
+                            } else if (checkStr.includes('sachet') || checkStr.includes('ซอง') || checkStr.includes('8') || checkStr.includes('drip')) {
+                                pkg = 'Sachet (ถุง 8)';
+                            } else if (checkStr.includes('กรัม') || checkStr.includes('gram') || checkStr.includes('แบ่งขาย')) {
+                                pkg = 'กรัมสำหรับขาย';
+                            } else {
+                                pkg = 'แพ็คถุง'; 
+                            }
+                        }
+
+                        let color = findValue(item, ['Color', 'สี', 'สีสินค้า']);
+                        if (!color) color = 'ไม่มี/ไม่ระบุ';
+                        
+                        let finalName = name;
+                        if (color !== 'ไม่มี/ไม่ระบุ' && !finalName.toLowerCase().includes(color.toLowerCase())) {
+                            finalName += ` - ${color}`;
+                        }
+                        if (pkg !== 'None') {
+                            finalName += ` (${pkg})`;
+                        }
+                        
+                        if (!skus.find(s => s.finalName === finalName)) {
+                            skus.push({
+                                name,
+                                finalName,
+                                category: cat,
+                                roaster: findValue(item, ['Roaster', 'โรงคั่ว'])
+                            });
+                        }
+                    });
+                }
+
+                // รวม SKU นอกแคตตาล็อกที่เคยถูกแก้ไขสต็อกไว้
+                Object.keys(inventory).forEach(key => {
+                    if (!skus.find(s => s.finalName === key)) {
+                        skus.push({ name: key, finalName: key, category: 'Other (Local)', roaster: '' });
+                    }
+                });
+
+                return skus.sort((a, b) => a.finalName.localeCompare(b.finalName));
+            }, [catalogData, inventory]);
+
+            const dynamicCategories = useMemo(() => {
+                const cats = new Set(['xPod and beans', 'xBloom Studio', 'Accessories', 'Other']);
+                if (catalogData) {
+                    catalogData.forEach(item => {
+                        let cat = findValue(item, ['Category', 'หมวดหมู่', 'Group']);
+                        if (!cat || cat.trim() === '') {
+                            cat = findValue(item, ['Type', 'ประเภท', 'กลุ่มสินค้า']);
+                        }
+                        if (cat && cat.trim() !== '') cats.add(cat.trim());
+                    });
+                }
+                return Array.from(cats);
+            }, [catalogData]);
+
+            // หาชื่อ SKU สุดท้ายในฟอร์มปัจจุบัน เพื่อนำไปเช็คและหักสต็อก
+            const currentFinalProductName = useMemo(() => {
+                if (!formData.productName) return '';
+                let finalName = formData.productName;
+                
+                if (formData.color && formData.color !== 'ไม่มี/ไม่ระบุ' && !finalName.toLowerCase().includes(formData.color.toLowerCase())) {
+                    finalName += ` - ${formData.color}`;
+                }
+                if (formData.packaging !== 'None') {
+                    finalName += ` (${formData.packaging})`;
+                }
+                return finalName;
+            }, [formData.productName, formData.packaging, formData.color]);
+
+            // Form Handlers
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                
+                if (name === 'productName') {
+                    let newCat = 'Other'; 
+                    let newRoaster = ''; 
+                    let newType = ''; 
+                    let newColor = 'ไม่มี/ไม่ระบุ';
+                    let newPackaging = 'None'; 
+                    const valLower = value.toLowerCase().trim();
+                    
+                    const accessoryKw = ['accessory', 'accessories', 'equipment', 'merch', 'apparel', 'gear', 'อุปกรณ์', 'ของแต่ง', 'filter', 'paper', 'กระดาษ', 'กรอง', 'แก้ว', 'เหยือก', 'scale', 'ตาชั่ง', 'ชั่ง', 'kettle', 'กา', 'dripper', 'ดริป', 'server', 'tote', 'bag', 'ถุง', 'pin', 'เข็มกลัด', 'เสื้อ', 'cup', 'glass', 'carafe', 'brush', 'แปรง', 'dosing', 'mat', 'แผ่น', 'tamper', 'แทม', 'pitcher', 'พิชเชอร์', 'พิทเชอร์', 'เคาะ', 'clean', 'ล้าง', 'ผ้า', 'พวงกุญแจ', 'keychain'];
+                    const studioKw = ['studio', 'machine', 'เครื่องชง', 'เครื่องบด', 'grinder', 'omni'];
+                    const coffeeKw = ['xpod', 'bean', 'เมล็ด', 'blend', 'roast', 'คั่ว', 'coffee', 'กาแฟ', 'sachet', 'ซอง', 'drip', 'gesha', 'geisha', 'ethiopia', 'colombia', 'brazil', 'kenya', 'panama', 'costa rica'];
+
+                    if (studioKw.some(k => valLower.includes(k))) newCat = 'xBloom Studio';
+                    else if (accessoryKw.some(k => valLower.includes(k))) newCat = 'Accessories';
+                    else if (coffeeKw.some(k => valLower.includes(k))) {
+                        newCat = 'xPod and beans';
+                        if (valLower.includes('xpod')) newPackaging = 'xPod';
+                    }
+
+                    // คาดเดาสีจากชื่อสินค้า
+                    if (valLower.includes('black') || valLower.includes('ดำ')) newColor = 'Black';
+                    else if (valLower.includes('white') || valLower.includes('ขาว')) newColor = 'White';
+                    else if (valLower.includes('sage') || valLower.includes('เขียว')) newColor = 'Sage';
+                    else if (valLower.includes('transparent') || valLower.includes('ใส')) newColor = 'Transparent';
+
+                    if (catalogData && catalogData.length > 0) {
+                        const matchedItem = catalogData.find(item => {
+                            const itemName = findValue(item, ['Product Name', 'ชื่อสินค้า', 'Item Name', 'Name', 'สินค้า']);
+                            return itemName && itemName.toLowerCase().trim() === valLower;
+                        });
+                        
+                        if (matchedItem) {
+                            const foundRoaster = findValue(matchedItem, ['Roaster', 'โรงคั่ว']);
+                            if (foundRoaster) newRoaster = foundRoaster.trim();
+
+                            const foundType = findValue(matchedItem, ['Type', 'ชนิด', 'รูปแบบ', 'Product Type']);
+                            if (foundType) newType = foundType.trim();
+
+                            const foundColor = findValue(matchedItem, ['Color', 'สี', 'สีสินค้า']);
+                            if (foundColor) newColor = foundColor.trim();
+
+                            let exactCat = findValue(matchedItem, ['Category', 'หมวดหมู่', 'Group']);
+                            if (!exactCat || exactCat.trim() === '') {
+                                exactCat = findValue(matchedItem, ['Type', 'ประเภท', 'กลุ่มสินค้า', 'Product Type']);
+                            }
+                            
+                            if (exactCat && exactCat.trim() !== '') {
+                                newCat = exactCat.trim();
+                            }
+
+                            const exactPkg = findValue(matchedItem, ['Packaging', 'แพ็กเกจ', 'บรรจุภัณฑ์']);
+                            if (exactPkg && exactPkg.trim() !== '') {
+                                newPackaging = exactPkg.trim();
+                            } else {
+                                const checkStr = (newType + ' ' + newCat).toLowerCase();
+                                if (checkStr.includes('studio') || checkStr.includes('machine') || checkStr.includes('accessory') || checkStr.includes('equipment') || checkStr.includes('อุปกรณ์') || checkStr.includes('แก้ว') || checkStr.includes('paper') || checkStr.includes('filter') || newCat === 'Accessories' || newCat === 'xBloom Studio') {
+                                    newPackaging = 'None';
+                                } else if (checkStr.includes('xpod')) {
+                                    newPackaging = 'xPod';
+                                } else if (checkStr.includes('sachet') || checkStr.includes('ซอง') || checkStr.includes('8') || checkStr.includes('drip')) {
+                                    newPackaging = 'Sachet (ถุง 8)';
+                                } else if (checkStr.includes('กรัม') || checkStr.includes('gram') || checkStr.includes('แบ่งขาย')) {
+                                    newPackaging = 'กรัมสำหรับขาย';
+                                } else {
+                                    newPackaging = 'แพ็คถุง'; 
+                                }
+                            }
+                        }
+                    }
+
+                    if (newCat === 'Accessories' || newCat === 'xBloom Studio') {
+                        newPackaging = 'None';
+                    }
+
+                    setFormData(prev => ({ 
+                        ...prev, productName: value, category: newCat, roaster: newRoaster, type: newType, color: newColor, packaging: newPackaging 
+                    }));
+                } else if (name === 'category') {
+                    let newPackaging = formData.packaging;
+                    if (value === 'Accessories' || value === 'xBloom Studio') {
+                        newPackaging = 'None';
+                    } else if (value === 'xPod and beans' && newPackaging === 'None') {
+                        newPackaging = 'แพ็คถุง';
+                    }
+                    setFormData(prev => ({ ...prev, category: value, packaging: newPackaging }));
+                } else {
+                    setFormData(prev => ({ ...prev, [name]: value }));
+                }
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!settings.apiUrl) {
+                    setStatusMsg({ type: 'error', msg: 'กรุณาตั้งค่า API Web App URL ในเมนูตั้งค่าก่อนบันทึก' });
+                    return;
+                }
+
+                setIsSubmitting(true);
+                setStatusMsg({ type: '', msg: '' });
+
+                const payload = { ...formData, productName: currentFinalProductName };
+
+                try {
+                    await fetch(settings.apiUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    // เพิ่มประวัติและอัปเดตสต็อกทันที (Optimistic Update)
+                    setRecentEntries(prev => [{ id: Date.now(), ...payload, time: new Date().toLocaleTimeString() }, ...prev].slice(0, 10));
+                    setInventory(prev => ({
+                        ...prev,
+                        [currentFinalProductName]: (prev[currentFinalProductName] || 0) - Number(formData.sales)
+                    }));
+                    
+                    setStatusMsg({ type: 'success', msg: 'บันทึกยอดขายและตัดสต็อกสำเร็จ!' });
+                    setTimeout(() => {
+                        setStatusMsg({ type: '', msg: '' });
+                        setFormData({ ...formData, productName: '', roaster: '', type: '', color: 'ไม่มี/ไม่ระบุ', gmv: '', sales: '', packaging: 'None', category: 'Other' }); 
+                    }, 1500);
+                } catch (err) {
+                    console.error('API Sync error:', err);
+                    setStatusMsg({ type: 'error', msg: 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่' });
+                }
+                setIsSubmitting(false);
+            };
+
+            const handleSaveSettings = (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const newSettings = { apiUrl: formData.get('apiUrl'), catalogUrl: formData.get('catalogUrl') };
+                setSettings(newSettings);
+                localStorage.setItem('xbloom_recorder_settings', JSON.stringify(newSettings));
+                setShowSettings(false);
+            };
+
+            // ฟังก์ชันสำหรับหน้า Stock
+            const [stockSearchTerm, setStockSearchTerm] = useState('');
+            const filteredSKUs = allSKUs.filter(sku => sku.finalName.toLowerCase().includes(stockSearchTerm.toLowerCase()));
+            
+            // จัดกลุ่ม SKU ตาม Category สำหรับหน้า Stock
+            const groupedSKUs = useMemo(() => {
+                const groups = {};
+                filteredSKUs.forEach(sku => {
+                    const cat = sku.category || 'Other';
+                    if (!groups[cat]) groups[cat] = [];
+                    groups[cat].push(sku);
+                });
+                return groups;
+            }, [filteredSKUs]);
+
+            const updateStock = (skuName, value) => {
+                setInventory(prev => ({ ...prev, [skuName]: value }));
+            };
+
+            return (
+                <div className="min-h-screen pb-20">
+                    <header className="bg-slate-900 text-white sticky top-0 z-40 shadow-md">
+                        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-purple-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                                    <Store className="w-4 h-4 text-white" />
+                                </div>
+                                <div className="flex bg-slate-800 rounded-xl p-1 ml-2">
+                                    <button onClick={() => setActiveTab('pos')} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeTab === 'pos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white'}`}>POS</button>
+                                    <button onClick={() => setActiveTab('stock')} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeTab === 'stock' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white'}`}>Stock</button>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowSettings(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><Settings className="w-5 h-5 text-slate-300" /></button>
+                        </div>
+                    </header>
+
+                    <main className="max-w-3xl mx-auto p-4 sm:p-6 mt-4 space-y-6">
+                        {statusMsg.msg && (
+                            <div className={`p-4 rounded-2xl flex items-center gap-3 shadow-lg border animate-in slide-in-from-top-4 ${statusMsg.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+                                {statusMsg.type === 'success' ? <Check className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                                <span className="text-sm font-bold">{statusMsg.msg}</span>
+                            </div>
+                        )}
+
+                        {activeTab === 'pos' ? (
+                            <Fragment>
+                                <div className="glass-panel p-5 sm:p-8 rounded-[32px] shadow-xl shadow-slate-200/50">
+                                    <div className="mb-6 pb-6 border-b border-slate-100 flex justify-between items-end">
+                                        <div>
+                                            <h2 className="text-xl font-black text-slate-800 tracking-tight">Record Sale</h2>
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">New Transaction</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Date</p>
+                                            <input type="date" name="date" value={formData.date} onChange={handleChange} className="text-sm font-black text-purple-600 bg-transparent border-none outline-none text-right cursor-pointer" />
+                                        </div>
+                                    </div>
+
+                                    <form onSubmit={handleSubmit} className="space-y-6">
+                                        <div className="space-y-5 bg-slate-50/50 p-5 sm:p-6 rounded-3xl border border-slate-100">
+                                            <div>
+                                                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Box className="w-3.5 h-3.5 text-purple-500" /> Product Name</label>
+                                                <SearchableSelect options={productOptions} name="productName" value={formData.productName} onChange={handleChange} isLoading={isLoadingCatalog} placeholder="ค้นหาหรือพิมพ์ชื่อสินค้า..." />
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                <div>
+                                                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Coffee className="w-3.5 h-3.5 text-amber-500" /> Roaster</label>
+                                                    <input type="text" name="roaster" value={formData.roaster} onChange={handleChange} placeholder="โรงคั่ว (ถ้ามี)" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><List className="w-3.5 h-3.5 text-indigo-500" /> Category</label>
+                                                    <div className="relative">
+                                                        <select name="category" value={formData.category} onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all appearance-none cursor-pointer">
+                                                            {dynamicCategories.map(cat => (
+                                                                <option key={cat} value={cat}>{cat}</option>
+                                                            ))}
+                                                        </select>
+                                                        <ChevronDown className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                <div>
+                                                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><List className="w-3.5 h-3.5 text-blue-500" /> Type</label>
+                                                    <input type="text" name="type" value={formData.type} onChange={handleChange} placeholder="ประเภท (ดึงจากไฟล์)" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Palette className="w-3.5 h-3.5 text-pink-500" /> Color</label>
+                                                    <div className="relative">
+                                                        <select name="color" value={formData.color} onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all appearance-none cursor-pointer">
+                                                            <option value="ไม่มี/ไม่ระบุ">ไม่มี/ไม่ระบุ</option>
+                                                            <option value="Black">Black</option>
+                                                            <option value="White">White</option>
+                                                            <option value="Sage">Sage</option>
+                                                            <option value="Transparent">Transparent</option>
+                                                        </select>
+                                                        <ChevronDown className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                <div>
+                                                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Package className="w-3.5 h-3.5 text-emerald-500" /> Packaging</label>
+                                                    <div className="relative">
+                                                        <select name="packaging" value={formData.packaging} onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all appearance-none cursor-pointer">
+                                                            <option value="xPod">xPod (แคปซูล)</option>
+                                                            <option value="Sachet (ถุง 8)">Sachet (ถุง 8)</option>
+                                                            <option value="แพ็คถุง">แพ็คถุง (เมล็ด)</option>
+                                                            <option value="กรัมสำหรับขาย">กรัมสำหรับขาย</option>
+                                                            <option value="None">ไม่มี/ไม่ระบุ</option>
+                                                        </select>
+                                                        <ChevronDown className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Smartphone className="w-3.5 h-3.5 text-teal-500" /> Channel</label>
+                                                    <div className="relative">
+                                                        <select name="channel" value={formData.channel} onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all appearance-none cursor-pointer">
+                                                            <option value="หน้าร้าน">หน้าร้าน (Storefront)</option>
+                                                            <option value="Line">Line (Chat)</option>
+                                                            <option value="Other">ช่องทางอื่นๆ</option>
+                                                        </select>
+                                                        <ChevronDown className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 gap-5">
+                                                <div>
+                                                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Calendar className="w-3.5 h-3.5 text-orange-500" /> Campaign/Event</label>
+                                                    <input type="text" name="campaign" value={formData.campaign} onChange={handleChange} placeholder="e.g. BAU" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 sm:gap-6">
+                                            <div className="bg-purple-50 p-4 sm:p-5 rounded-[24px] border border-purple-100/50">
+                                                <label className="block text-[10px] sm:text-[11px] font-black text-purple-600 uppercase tracking-widest mb-3">Total Sales (฿)</label>
+                                                <div className="relative">
+                                                    <span className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-purple-400 font-bold text-lg">฿</span>
+                                                    <input type="number" name="gmv" required value={formData.gmv} onChange={handleChange} placeholder="0.00" className="w-full bg-white border-none rounded-xl pl-8 sm:pl-10 pr-4 py-3 sm:py-4 text-xl sm:text-2xl font-black text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-sm" />
+                                                </div>
+                                            </div>
+                                            <div className="bg-emerald-50 p-4 sm:p-5 rounded-[24px] border border-emerald-100/50">
+                                                <label className="block text-[10px] sm:text-[11px] font-black text-emerald-600 uppercase tracking-widest mb-3 flex justify-between">
+                                                    <span>Quantity</span>
+                                                    {currentFinalProductName && (
+                                                        <span className={(inventory[currentFinalProductName] || 0) > 0 ? "text-emerald-500" : "text-rose-500"}>
+                                                            (Stock: {inventory[currentFinalProductName] || 0})
+                                                        </span>
+                                                    )}
+                                                </label>
+                                                <input type="number" name="sales" required value={formData.sales} onChange={handleChange} placeholder="0" className="w-full bg-white border-none rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-xl sm:text-2xl font-black text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-sm text-center" />
+                                            </div>
+                                        </div>
+
+                                        <button type="submit" disabled={isSubmitting} className={`w-full py-5 text-white rounded-2xl text-sm font-black uppercase tracking-[2px] transition-all flex justify-center items-center gap-3 shadow-xl ${isSubmitting ? 'bg-purple-400 shadow-purple-200' : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-500/30 active:scale-[0.98]'}`}>
+                                            {isSubmitting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                                            {isSubmitting ? 'Saving to Database...' : 'Confirm Transaction'}
+                                        </button>
+                                    </form>
+                                </div>
+
+                                {recentEntries.length > 0 && (
+                                    <div className="mt-8">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            Recent Transactions (Session)
+                                            <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full text-[9px]">{recentEntries.length}</span>
+                                        </h3>
+                                        <div className="space-y-3">
+                                            {recentEntries.map(entry => (
+                                                <div key={entry.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between animate-in fade-in slide-in-from-left-4">
+                                                    <div className="flex-1 min-w-0 pr-4">
+                                                        <p className="text-sm font-bold text-slate-800 truncate">{entry.productName}</p>
+                                                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                                            {entry.time} • {entry.channel} • {entry.category} {entry.color !== 'ไม่มี/ไม่ระบุ' ? `• ${entry.color}` : ''}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right shrink-0">
+                                                        <p className="text-sm font-black text-emerald-600">฿{Number(entry.gmv).toLocaleString()}</p>
+                                                        <p className="text-[10px] text-slate-500 font-bold">{entry.sales} unit(s)</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </Fragment>
+                        ) : (
+                            <div className="glass-panel p-5 sm:p-8 rounded-[32px] shadow-xl shadow-slate-200/50 animate-in fade-in">
+                                <div className="mb-6 flex justify-between items-end">
+                                    <div>
+                                        <h2 className="text-xl font-black text-slate-800 tracking-tight">Stock Management</h2>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Manage Inventory</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-1 rounded-lg inline-block">Local Storage</p>
+                                    </div>
+                                </div>
+
+                                <div className="mb-6 relative">
+                                    <Search className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
+                                    <input type="text" placeholder="ค้นหาชื่อสินค้าที่ต้องการปรับสต็อก..." 
+                                        className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 outline-none shadow-sm" 
+                                        value={stockSearchTerm} onChange={e => setStockSearchTerm(e.target.value)} 
+                                    />
+                                </div>
+
+                                <div className="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                                    {Object.keys(groupedSKUs).length > 0 ? (
+                                        Object.keys(groupedSKUs).sort().map(category => (
+                                            <div key={category} className="mb-8 last:mb-0">
+                                                <div className="flex items-center gap-2 mb-4">
+                                                    <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100/50">
+                                                        {category}
+                                                    </h3>
+                                                    <div className="h-px bg-slate-100 flex-1"></div>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    {groupedSKUs[category].map((sku, index) => {
+                                                        const currentVal = inventory[sku.finalName] || 0;
+                                                        return (
+                                                            <div key={index} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between shadow-sm hover:border-purple-200 transition-colors group">
+                                                                <div className="flex-1 min-w-0 pr-4">
+                                                                    <p className="text-sm font-bold text-slate-800 truncate group-hover:text-purple-700 transition-colors" title={sku.finalName}>{sku.finalName}</p>
+                                                                    {sku.roaster && <p className="text-[10px] text-amber-500 font-black mt-0.5 uppercase tracking-widest">[{sku.roaster}]</p>}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 shrink-0 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+                                                                    <button onClick={() => updateStock(sku.finalName, currentVal - 1)} className="w-8 h-8 rounded-lg bg-white text-rose-500 border border-slate-200 flex items-center justify-center font-bold hover:bg-rose-50 hover:border-rose-200 transition-all shadow-sm active:scale-95">-</button>
+                                                                    <input type="number" value={currentVal} onChange={e => updateStock(sku.finalName, Number(e.target.value))} className="w-14 text-center font-black text-slate-800 bg-transparent border-none py-1 outline-none appearance-none" />
+                                                                    <button onClick={() => updateStock(sku.finalName, currentVal + 1)} className="w-8 h-8 rounded-lg bg-white text-emerald-500 border border-slate-200 flex items-center justify-center font-bold hover:bg-emerald-50 hover:border-emerald-200 transition-all shadow-sm active:scale-95">+</button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-10">
+                                            <Package className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                            <p className="text-sm font-bold text-slate-400">ไม่พบรายการสินค้าที่ค้นหา</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {showSettings && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                            <div className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl modal-animate">
+                                <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                    <h2 className="text-base font-black text-slate-800 flex items-center gap-2"><Settings className="w-4 h-4 text-slate-400"/> Settings</h2>
+                                    <button onClick={() => setShowSettings(false)} className="p-1.5 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
+                                </div>
+                                <form onSubmit={handleSaveSettings} className="p-6 space-y-6">
+                                    <div>
+                                        <label className="block text-[11px] font-black text-slate-600 uppercase tracking-widest mb-2">Google Apps Script URL (POST)</label>
+                                        <input type="text" name="apiUrl" defaultValue={settings.apiUrl} placeholder="https://script.google.com/macros/s/.../exec" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-purple-500" required />
+                                        <p className="text-[10px] text-slate-400 mt-2">URL สำหรับส่งข้อมูลยอดขายไปบันทึกลง Google Sheets</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-black text-slate-600 uppercase tracking-widest mb-2">Catalog CSV URL</label>
+                                        <input type="text" name="catalogUrl" defaultValue={settings.catalogUrl} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-purple-500" />
+                                        <p className="text-[10px] text-slate-400 mt-2">ลิงก์ CSV รายชื่อสินค้า เพื่อใช้เป็นตัวช่วยค้นหาอัตโนมัติ</p>
+                                    </div>
+                                    <button type="submit" className="w-full py-3.5 bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-900 transition-colors">Save Settings</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

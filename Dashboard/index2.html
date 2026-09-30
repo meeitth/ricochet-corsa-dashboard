@@ -1,0 +1,2138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xBloom Sale Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Babel for parsing JSX in browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        /* Custom Scrollbar for tables */
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        body { margin: 0; padding: 0; background-color: #f8fafc; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useMemo, useEffect, Fragment } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+          LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+          Cell, PieChart, Pie, Legend, AreaChart, Area
+        } from 'https://esm.sh/recharts@2.12.0?deps=react@18.2.0,react-dom@18.2.0';
+        import { 
+          Calendar, ChevronDown, Download, TrendingUp, TrendingDown, 
+          Search, ChevronLeft, Home, 
+          X, RefreshCw, Target, 
+          Check, Database, Lock, Save, AlertCircle, MapPin, Copy
+        } from 'https://esm.sh/lucide-react@0.359.0?deps=react@18.2.0';
+        import { ComposableMap, Geographies, Geography } from 'https://esm.sh/react-simple-maps@3.0.0?deps=react@18.2.0,react-dom@18.2.0';
+
+        // --- Google Sheets Integration ---
+        const DEFAULT_PLATFORM_URLS = {
+          Shopee: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRF0ad8XUcRjW3YyHZsmKsnf3sK_B8aKkrS3Nu_xL0hn6AJziTLGuHYhdyzBmVE3Q/pub?gid=354235775&single=true&output=csv', 
+          Lazada: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRF0ad8XUcRjW3YyHZsmKsnf3sK_B8aKkrS3Nu_xL0hn6AJziTLGuHYhdyzBmVE3Q/pub?gid=1095280982&single=true&output=csv', 
+          Line: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRF0ad8XUcRjW3YyHZsmKsnf3sK_B8aKkrS3Nu_xL0hn6AJziTLGuHYhdyzBmVE3Q/pub?gid=222987836&single=true&output=csv',   
+          TikTok: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRF0ad8XUcRjW3YyHZsmKsnf3sK_B8aKkrS3Nu_xL0hn6AJziTLGuHYhdyzBmVE3Q/pub?gid=222737378&single=true&output=csv',
+          'Direct sales': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQwg2EqSk_nW8ZZM8hsKDJmkyHUuX7rRMFLAH_tVSSzNJWYcYT_2G9q-XhFLM_a1w/pub?gid=1304035521&single=true&output=csv',
+          'B2B': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQwg2EqSk_nW8ZZM8hsKDJmkyHUuX7rRMFLAH_tVSSzNJWYcYT_2G9q-XhFLM_a1w/pub?gid=1304035521&single=true&output=csv',
+          'Store': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQVXXd1h02IXve7b9X2wxYzZ7Cp23gBoszu3qmvEpsdLrlJVmJyPTh6WbQeUIXaQw/pub?gid=1208508020&single=true&output=csv'
+        };
+
+        const ADMIN_PASSCODE = "xbloom2026";
+
+        // Raw 2D Array parser for complex crosstab formats
+        const parseCSV2D = (csvText) => {
+          const rows = [];
+          let row = [];
+          let cur = '';
+          let inQuotes = false;
+          
+          for (let i = 0; i < csvText.length; i++) {
+            const char = csvText[i];
+            if (char === '"') { inQuotes = !inQuotes; } 
+            else if (char === ',' && !inQuotes) { row.push(cur); cur = ''; } 
+            else if ((char === '\n' || char === '\r') && !inQuotes) {
+              if (char === '\r') continue;
+              row.push(cur); rows.push(row); row = []; cur = '';
+            } else { cur += char; }
+          }
+          if (cur !== '' || row.length > 0) { row.push(cur); rows.push(row); }
+          return rows;
+        };
+
+        const parseCSV = (csvText) => {
+          const rows = parseCSV2D(csvText);
+          if (rows.length === 0) return [];
+          
+          let headerIndex = 0;
+          for (let i = 0; i < Math.min(10, rows.length); i++) {
+            const rowString = rows[i].join('').toLowerCase();
+            if (rowString.includes('date') || rowString.includes('gmv') || rowString.includes('sales') || rowString.includes('item') || rowString.includes('วันที่')) {
+              headerIndex = i;
+              break;
+            }
+          }
+
+          const headers = rows[headerIndex].map(h => h.replace(/^"|"$/g, '').trim());
+          return rows.slice(headerIndex + 1).filter(r => r.length > 0 && r.some(cell => cell.trim() !== '')).map(r => {
+            const obj = { __raw: r };
+            headers.forEach((h, i) => { if (h) obj[h] = r[i] !== undefined ? r[i].replace(/^"|"$/g, '').trim() : ''; });
+            return obj;
+          });
+        };
+
+        const findValue = (row, keys) => {
+          const lowerKeys = keys.map(k => k.toLowerCase().trim());
+          const rowKeys = Object.keys(row);
+          for (let k of rowKeys) { if (lowerKeys.includes(k.toLowerCase().trim())) return row[k]; }
+          return '';
+        };
+
+        const parseNum = (val) => {
+          if (!val) return 0;
+          const cleanVal = String(val).replace(/,/g, '').replace(/฿/g, '').replace(/%/g, '').trim();
+          return Number(cleanVal) || 0;
+        };
+
+        // สำหรับแพลตฟอร์มปกติ (Shopee, Lazada, TikTok, Line)
+        const formatRawData = (parsedData, platform) => {
+          return parsedData.map((row, index) => {
+            let colDate = findValue(row, ['date', 'Date', 'วันที่', 'Day', 'เวลา', 'Time']);
+            let colMonthNum = findValue(row, ['Month', 'month', 'Month (Number)', 'เดือนตัวเลข', 'เดือน (ตัวเลข)', 'เดือน']);
+            let colYear = findValue(row, ['Year', 'year', 'ปี']);
+
+            if (platform === 'TikTok' || platform === 'Lazada') {
+                if (!colDate && row.__raw && row.__raw[9]) colDate = String(row.__raw[9]).replace(/^"|"$/g, '').trim();
+                if (!colMonthNum && row.__raw && row.__raw[10]) colMonthNum = String(row.__raw[10]).replace(/^"|"$/g, '').trim();
+                if (!colYear && row.__raw && row.__raw[12]) colYear = String(row.__raw[12]).replace(/^"|"$/g, '').trim();
+            }
+            
+            let finalDateStr = '';
+            if (colYear && colMonthNum) {
+                let d = '01';
+                let colDateStr = String(colDate).trim();
+                if (colDateStr.includes('/')) d = colDateStr.split('/')[0];
+                else if (colDateStr.includes('-')) {
+                    const parts = colDateStr.split('-');
+                    d = parts[0].length === 4 ? parts[2] : parts[0];
+                } else if (colDateStr) d = colDateStr;
+                
+                d = d.replace(/\D/g, ''); if(!d) d = '01'; d = d.padStart(2, '0');
+                let m = String(colMonthNum).replace(/\D/g, ''); if(!m) m = '01'; m = m.padStart(2, '0');
+                let y = String(colYear).replace(/\D/g, '');
+                if (y.length === 2) y = '20' + y;
+                if (!y) y = new Date().getFullYear().toString();
+                
+                finalDateStr = `${y}-${m}-${d}`;
+            } else if (colDate) {
+                let itemDateStr = String(colDate).trim();
+                if (itemDateStr.includes('/')) {
+                  const parts = itemDateStr.split('/');
+                  let d = parts[0].padStart(2, '0'); let m = parts[1].padStart(2, '0'); let y = parts[2];
+                  if (y.length === 2) y = '20' + y;
+                  finalDateStr = `${y}-${m}-${d}`;
+                } else {
+                  const parsed = new Date(itemDateStr);
+                  if(!isNaN(parsed.getTime())) finalDateStr = parsed.toISOString().split('T')[0];
+                  else finalDateStr = itemDateStr; 
+                }
+            }
+
+            const gmv = parseNum(findValue(row, ['GMV', 'ยอดขาย', 'Sales Amount', 'Revenue', 'Gross Revenue', 'รายได้', 'ยอดชำระเงิน']));
+            const sales = parseNum(findValue(row, ['Item Sold', 'Sales', 'Units', 'จำนวนที่ขาย', 'Orders', 'คำสั่งซื้อ', 'จำนวนคำสั่งซื้อ', 'Net units sold']));
+            const visitors = parseNum(findValue(row, ['Visitors', 'ผู้เข้าชม', 'Product Visitors', 'ผู้เยี่ยมชมสินค้า']));
+            const views = parseNum(findValue(row, ['Views', 'Page View', 'ยอดวิว', 'Product Page Views', 'จำนวนการดูหน้าสินค้า']));
+            const cr = visitors > 0 ? Number(((sales / visitors) * 100).toFixed(2)) : 0;
+            
+            const provinceNames = ['กรุงเทพมหานคร', 'เชียงใหม่', 'ภูเก็ต', 'ชลบุรี', 'ขอนแก่น', 'นครราชสีมา', 'สงขลา', 'สุราษฎร์ธานี', 'พระนครศรีอยุธยา', 'นนทบุรี', 'ระยอง', 'อุดรธานี', 'อุบลราชธานี', 'นครปฐม', 'ปทุมธานี'];
+            let province = findValue(row, ['Province', 'จังหวัด', 'Location', 'ที่อยู่', 'State']);
+            if (!province) {
+               let hash = 0;
+               const str = findValue(row, ['Product Name', 'name', 'ชื่อสินค้า', 'SKU']) || String(index);
+               for(let i=0; i<str.length; i++) hash += str.charCodeAt(i);
+               province = provinceNames[hash % provinceNames.length];
+            }
+
+            return {
+              id: `${platform}-${index}`,
+              platform: platform,
+              date: finalDateStr,
+              name: findValue(row, ['Product Name', 'name', 'ชื่อสินค้า', 'SKU', 'SKU Description', 'Product Title', 'ชื่อผลิตภัณฑ์', 'Item Name']) || ((platform === 'TikTok' || platform === 'Lazada') ? `${platform} Store` : `Unknown SKU ${index}`),
+              category: findValue(row, ['Category', 'หมวดหมู่', 'Product Category', 'หมวดหมู่สินค้า']) || 'Other',
+              campaign: findValue(row, ['Campaign', 'แคมเปญ']) || 'BAU',
+              province: province,
+              gmv, sales, cr, visitors, views,
+              status: findValue(row, ['Status', 'สถานะ']) || 'Steady',
+              growth: parseNum(findValue(row, ['Growth', 'การเติบโต', '%Growth']))
+            };
+          });
+        };
+
+        const checkIsStudio = (category, productName) => {
+            const cat = String(category).toLowerCase();
+            const name = String(productName).toLowerCase();
+            
+            const isMachine = name.includes('midnight black') || 
+                              name.includes('moonlight white') || 
+                              name.includes('sage green-green') || 
+                              name.includes('sage green-gold') || 
+                              name.includes('twilight');
+                              
+            if (isMachine) return true;
+            
+            const str = cat + ' ' + name;
+            const isAccessory = str.includes('filter') || 
+                                str.includes('tea brewer') || 
+                                str.includes('coffee spoon') || 
+                                str.includes('kinto') || 
+                                str.includes('omni dripper') || 
+                                str.includes('travel bag') || 
+                                str.includes('inline water pressure') || 
+                                str.includes('magnetic dosing cup') || 
+                                str.includes('studio power cord') || 
+                                str.includes('drip tray') || 
+                                str.includes('water tank') || 
+                                str.includes('dock stand') ||
+                                str.includes('accessories') ||
+                                str.includes('xpod') || 
+                                str.includes('bean') || 
+                                str.includes('sachet');
+                                
+            if (isAccessory) return false;
+            
+            return cat.includes('studio') || cat.includes('machine') || cat.includes('เครื่องชง');
+        };
+
+        // สำหรับ Direct sales และ B2B
+        const formatDirectSalesData = (rows2D, platform, isDedicatedCSV) => {
+            if (rows2D.length < 5) return [];
+
+            const categories = [];
+            let lastCat = 'Other';
+            for (let i = 9; i <= 88; i++) {
+                let cat = rows2D[0] && rows2D[0][i] ? String(rows2D[0][i]).trim() : '';
+                if (cat !== '') {
+                    const lowerCat = cat.toLowerCase();
+                    if (lowerCat.includes('studio')) lastCat = 'xBloom Studio';
+                    else if (lowerCat.includes('accessories')) lastCat = 'Accessories';
+                    else if (lowerCat.includes('xpod pack')) lastCat = 'Xpod Pack';
+                    else if (lowerCat.includes('sachet') || lowerCat.includes('15g')) lastCat = 'Xpod Sachet 15g';
+                    else if (lowerCat.includes('bean') || lowerCat.includes('300g')) lastCat = 'Bean 300g.';
+                    else lastCat = cat;
+                }
+                categories[i] = lastCat;
+            }
+
+            const productNames = [];
+            for (let i = 9; i <= 88; i++) {
+                let pName = rows2D[1] && rows2D[1][i] ? String(rows2D[1][i]).trim() : '';
+                productNames[i] = pName;
+            }
+
+            const formattedData = [];
+
+            // INJECT CATALOG
+            for (let i = 9; i <= 88; i++) {
+                if (productNames[i] && productNames[i] !== '') {
+                    formattedData.push({
+                        id: `Direct-Catalog-${i}`,
+                        platform: platform,
+                        date: '2026-01-01',
+                        name: productNames[i],
+                        category: categories[i] || 'Other',
+                        campaign: 'BAU',
+                        province: 'กรุงเทพมหานคร',
+                        gmv: 0,
+                        sales: 0,
+                        cr: 0, visitors: 0, views: 0,
+                        status: 'Steady',
+                        growth: 0
+                    });
+                }
+            }
+
+            const orders = [];
+            let currentOrder = null;
+            
+            let lastDate = '';
+            let lastPlatform = '';
+            let lastWho = '';
+            let lastName = '';
+
+            for (let r = 4; r < rows2D.length; r++) {
+                const row = rows2D[r];
+                if (!row || row.length < 5) continue;
+
+                let rawDate = row[2] ? String(row[2]).trim() : '';
+                let rawPlatform = row[3] ? String(row[3]).trim() : '';
+                let rawWho = row[5] ? String(row[5]).trim() : '';
+                let rawName = row[6] ? String(row[6]).trim() : '';
+
+                if (rawDate.toLowerCase().includes('total') || rawDate.includes('รวม') || 
+                    rawPlatform.includes('รวม')) {
+                    continue; 
+                }
+
+                if (rawDate) lastDate = rawDate; else rawDate = lastDate;
+                if (rawPlatform) lastPlatform = rawPlatform; else rawPlatform = lastPlatform;
+                if (rawWho) lastWho = rawWho; else rawWho = lastWho;
+                if (rawName) lastName = rawName; else rawName = lastName;
+
+                if (!rawDate) continue; 
+
+                // หากเป็นไฟล์แยกเฉพาะ (เช่น B2B มีไฟล์ของตัวเอง) จะไม่บังคับกรองชื่อ Platform
+                if (!isDedicatedCSV) {
+                    const checkPlat = rawPlatform.toLowerCase().replace(/\s+/g, '');
+                    if (platform === 'Direct sales') {
+                        if (!checkPlat.includes('direct-lineoa')) continue;
+                    } else if (platform === 'B2B') {
+                        if (!checkPlat.includes('b2b')) continue;
+                    } else {
+                        if (checkPlat.includes('shopee') || checkPlat.includes('lineshop') || checkPlat === 'line') continue;
+                    }
+                }
+
+                let finalDateStr = '';
+                let dStr = rawDate;
+                if (dStr.includes('/')) {
+                    const parts = dStr.split('/');
+                    let d = parts[0].padStart(2, '0');
+                    let m = parts[1] ? parts[1].padStart(2, '0') : '01';
+                    let y = parts[2] || new Date().getFullYear().toString();
+                    if (y.length === 2) y = '20' + y;
+                    finalDateStr = `${y}-${m}-${d}`;
+                } else if (dStr.includes('-')) {
+                    const parts = dStr.split('-');
+                    let y = parts[0].length === 4 ? parts[0] : (parts[2] && parts[2].length === 4 ? parts[2] : new Date().getFullYear().toString());
+                    let m = parts[1] ? parts[1].padStart(2, '0') : '01';
+                    let d = parts[0].length === 4 ? (parts[2] ? parts[2].padStart(2, '0') : '01') : parts[0].padStart(2, '0');
+                    finalDateStr = `${y}-${m}-${d}`;
+                } else {
+                    const parsed = new Date(dStr);
+                    if (!isNaN(parsed.getTime())) finalDateStr = parsed.toISOString().split('T')[0];
+                    else finalDateStr = dStr;
+                }
+
+                if (!currentOrder || currentOrder.date !== finalDateStr || currentOrder.rawPlatform !== rawPlatform || currentOrder.rawName !== rawName) {
+                    if (currentOrder) orders.push(currentOrder);
+                    currentOrder = {
+                        date: finalDateStr,
+                        rawPlatform: rawPlatform,
+                        rawName: rawName,
+                        gmv: 0,
+                        items: {}
+                    };
+                }
+
+                const gmvVal = row.length > 94 ? parseNum(row[94]) : 0; 
+                currentOrder.gmv += gmvVal;
+
+                for (let c = 9; c <= 88; c++) {
+                    if (!productNames[c]) continue; 
+                    if (row[c] !== undefined && String(row[c]).trim() !== '') {
+                        const val = parseNum(row[c]);
+                        if (val > 0) {
+                            currentOrder.items[c] = (currentOrder.items[c] || 0) + val;
+                        }
+                    }
+                }
+            }
+            if (currentOrder) orders.push(currentOrder);
+
+            orders.forEach((order, orderIndex) => {
+                const dailyGmv = order.gmv;
+                const productsToday = Object.keys(order.items).map(col => ({ col: parseInt(col), val: order.items[col] }));
+
+                // Skip if no items to avoid empty/orphan GMV
+                if (productsToday.length === 0) return;
+
+                let studioCount = 0;
+                let otherCount = 0;
+                productsToday.forEach(p => {
+                    const isStudio = checkIsStudio(categories[p.col], productNames[p.col]);
+                    if (isStudio) {
+                        studioCount += p.val;
+                    } else {
+                        otherCount += p.val;
+                    }
+                });
+
+                let studioGmv = 0;
+                let otherGmv = 0;
+                if (studioCount > 0 && otherCount === 0) {
+                    studioGmv = dailyGmv;
+                } else if (studioCount === 0 && otherCount > 0) {
+                    otherGmv = dailyGmv;
+                } else if (studioCount > 0 && otherCount > 0) {
+                    studioGmv = Math.min(studioCount * 30000, dailyGmv);
+                    otherGmv = Math.max(0, dailyGmv - studioGmv);
+                } else {
+                    otherGmv = dailyGmv;
+                }
+
+                productsToday.forEach(p => {
+                    const isStudio = checkIsStudio(categories[p.col], productNames[p.col]);
+                    
+                    let allocatedGmv = 0;
+                    if (isStudio && studioCount > 0) {
+                        allocatedGmv = (p.val / studioCount) * studioGmv;
+                    } else if (!isStudio && otherCount > 0) {
+                        allocatedGmv = (p.val / otherCount) * otherGmv;
+                    }
+
+                    formattedData.push({
+                        id: `Direct-${orderIndex}-${p.col}`,
+                        platform: platform,
+                        date: order.date,
+                        name: productNames[p.col],
+                        category: categories[p.col],
+                        campaign: 'BAU',
+                        province: 'กรุงเทพมหานคร',
+                        gmv: allocatedGmv,
+                        sales: p.val,
+                        cr: 0, visitors: 0, views: 0,
+                        status: 'Steady',
+                        growth: 0
+                    });
+                });
+            });
+
+            return formattedData;
+        };
+
+        // สำหรับแท็บ Store โดยเฉพาะ (อ่านจาก Column L, M, N)
+        const formatStoreData = (rows2D, platform) => {
+            const formattedData = [];
+            
+            // INJECT CATALOG เพื่อให้กราฟโดนัทและตารางมีข้อมูลสีครบทั้ง 5 รุ่นเสมอ
+            const catalogNames = [
+                'xBloom Studio Midnight Black',
+                'xBloom Studio Moonlight White',
+                'xBloom Studio Sage Green-Green',
+                'xBloom Studio Sage Green-Gold',
+                'xBloom Studio Twilight'
+            ];
+            
+            catalogNames.forEach((name, idx) => {
+                formattedData.push({
+                    id: `Store-Catalog-${idx}`,
+                    platform: platform,
+                    date: '2026-01-01',
+                    name: name,
+                    category: 'xBloom Studio',
+                    campaign: 'BAU',
+                    province: 'กรุงเทพมหานคร',
+                    gmv: 0,
+                    sales: 0,
+                    cr: 0, visitors: 0, views: 0,
+                    status: 'Steady',
+                    growth: 0
+                });
+            });
+
+            if (rows2D.length < 2) return formattedData;
+
+            // เริ่มอ่านข้อมูลจากบรรทัดที่ 2 (index 1)
+            for (let r = 1; r < rows2D.length; r++) {
+                const row = rows2D[r];
+                if (!row || row.length < 4) continue; // ต้องมีข้อมูลราคา (Col D) ถึงจะคิด
+
+                // ดึง Date (L), Month (M), Year (N) -> index 11, 12, 13
+                let day = String(row[11] || '').trim();
+                let month = String(row[12] || '').trim();
+                let year = String(row[13] || '').trim();
+
+                // Fallback ถ้าระบุ LMN ไม่ครบ ให้ดึงจากช่อง A (index 0) แทน
+                if (!day && !month && !year) {
+                    let rawA = String(row[0] || '').trim();
+                    if (rawA && rawA.includes('/')) {
+                        const parts = rawA.split('/');
+                        day = parts[0];
+                        month = parts[1];
+                        year = parts[2];
+                    }
+                }
+                if(!day || !month || !year) continue; 
+                
+                day = day.padStart(2, '0');
+                month = month.padStart(2, '0');
+                if (year.length === 2) year = '20' + year;
+                if (year.length !== 4) year = new Date().getFullYear().toString();
+
+                const finalDateStr = `${year}-${month}-${day}`;
+
+                // ดึง GMV (ราคา) จากคอลัมน์ D (index 3)
+                const gmv = parseNum(row[3]); 
+                if (gmv === 0 && !row[2]) continue; // ถ้าไม่มีราคาและไม่มีสี ข้ามไป
+
+                // ดึง Color (รุ่น) จากคอลัมน์ C (index 2) เพื่อแปลงเป็นชื่อเต็ม
+                const colorRaw = String(row[2] || '').toLowerCase().trim();
+                let productName = 'xBloom Studio'; // Default
+                if (colorRaw.includes('white')) productName = 'xBloom Studio Moonlight White';
+                else if (colorRaw.includes('black')) productName = 'xBloom Studio Midnight Black';
+                else if (colorRaw.includes('gold')) productName = 'xBloom Studio Sage Green-Gold';
+                else if (colorRaw.includes('green')) productName = 'xBloom Studio Sage Green-Green';
+                else if (colorRaw.includes('twilight')) productName = 'xBloom Studio Twilight';
+                else if (colorRaw !== '') productName = `xBloom Studio ${row[2]}`; // เผื่อพิมพ์สีอื่นมา
+
+                formattedData.push({
+                    id: `Store-${r}`,
+                    platform: platform,
+                    date: finalDateStr,
+                    name: productName,
+                    category: 'xBloom Studio', // สินค้าในชีท Store คือเครื่องชงทั้งหมด
+                    campaign: String(row[8] || 'BAU').trim() || 'BAU', // Promotion (Column I)
+                    province: 'กรุงเทพมหานคร',
+                    gmv: gmv,
+                    sales: 1, // 1 แถวในชีท Store = ขายได้ 1 เครื่อง
+                    cr: 0, visitors: 0, views: 0,
+                    status: 'Steady',
+                    growth: 0
+                });
+            }
+            return formattedData;
+        };
+
+        const generateSparkData = () => [ { v: 40 }, { v: 55 }, { v: 48 }, { v: 70 }, { v: 65 }, { v: 85 }, { v: 75 } ];
+
+        const CATEGORY_COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+        const PLATFORM_COLORS = { Shopee: '#f97316', Lazada: '#0ea5e9', TikTok: '#0f172a', Line: '#22c55e', 'Direct sales': '#8b5cf6', 'B2B': '#f43f5e', 'Store': '#eab308' };
+        const CAMPAIGN_COLORS = ['#6366f1', '#14b8a6', '#f59e0b', '#a855f7', '#ef4444'];
+
+        const shiftDateLW = (date) => { const d = new Date(date); d.setDate(d.getDate() - 7); return d; };
+        const shiftDateLM = (date) => { const d = new Date(date); const m = d.getMonth(); d.setMonth(d.getMonth() - 1); if (d.getMonth() === m) d.setDate(0); return d; };
+        const shiftDateLY = (date) => { const d = new Date(date); d.setFullYear(d.getFullYear() - 1); return d; };
+
+        const exportToCSV = (data, filename) => {
+          if (!data || data.length === 0) return;
+          const headers = Object.keys(data[0]).join(',');
+          const rows = data.map(obj => Object.values(obj).map(val => { const strVal = String(val); return strVal.includes(',') ? `"${strVal}"` : strVal; }).join(',')).join('\n');
+          const csv = `${headers}\n${rows}`;
+          const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `${filename}.csv`;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        };
+
+        // --- Custom Pie Chart Legend Component ---
+        const PieChartLegend = ({ data }) => (
+          <div className="flex flex-col gap-2 mt-4">
+            {data.map((item, idx) => (
+              <div key={idx} className="p-3 rounded-2xl bg-slate-50 flex items-center justify-between border border-transparent hover:border-slate-200 transition-all hover:bg-white hover:shadow-sm">
+                <div className="flex items-center gap-2.5 w-[35%] min-w-[100px]">
+                  <div className="w-2.5 h-2.5 rounded-full shadow-sm shrink-0" style={{ backgroundColor: item.color }} />
+                  <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest truncate" title={item.name}>{item.name}</span>
+                </div>
+                
+                <div className="flex items-center justify-end flex-1 gap-2 sm:gap-4">
+                  <div className="flex flex-col text-right">
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">GMV</span>
+                    <span className="text-[11px] font-black text-slate-800">฿{item.gmv.toLocaleString('th-TH', { maximumFractionDigits: 0 })}</span>
+                  </div>
+                  
+                  {item.units !== undefined && (
+                    <div className="flex flex-col text-right min-w-[2.5rem]">
+                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Sold</span>
+                      <span className="text-[11px] font-black text-slate-600">{item.units.toLocaleString('th-TH')}</span>
+                    </div>
+                  )}
+                  
+                  <div className="min-w-[2.5rem] text-right ml-1">
+                     <span className="text-[10px] font-black text-indigo-600 bg-indigo-50/70 px-2 py-1 rounded-md inline-block w-full text-center">{item.percentage}%</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+
+        // --- Components ---
+
+        const FilterBar = ({ onApply, selectedPlatform, availableCategories = [], availableCampaigns = [], currentFilters }) => {
+          const [activeFilters, setActiveFilters] = useState(currentFilters?.activeFilters || { date: false, category: false, campaign: false, product: false });
+          const [tempValues, setTempValues] = useState(currentFilters?.tempValues || { startDate: '', endDate: '', category: '', campaign: '', productName: '' });
+          const [isApplying, setIsApplying] = useState(false);
+
+          useEffect(() => {
+            if (currentFilters) {
+              setActiveFilters(currentFilters.activeFilters || { date: false, category: false, campaign: false, product: false });
+              setTempValues(currentFilters.tempValues || { startDate: '', endDate: '', category: '', campaign: '', productName: '' });
+            }
+          }, [currentFilters]);
+
+          const toggleFilter = (key) => setActiveFilters(prev => ({ ...prev, [key]: !prev[key] }));
+          const handleApply = () => { setIsApplying(true); setTimeout(() => { onApply({ activeFilters, tempValues }); setIsApplying(false); }, 500); };
+          const handleReset = () => {
+            const resetActive = { date: false, category: false, campaign: false, product: false };
+            const resetValues = { startDate: '', endDate: '', category: '', campaign: '', productName: '' };
+            setActiveFilters(resetActive); setTempValues(resetValues);
+            onApply({ activeFilters: resetActive, tempValues: resetValues });
+          };
+
+          return (
+            <div className="bg-white p-7 rounded-[32px] border border-slate-100 shadow-sm mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-6 items-start">
+                <div className={`xl:col-span-3 transition-opacity duration-300 ${!activeFilters.date ? 'opacity-40' : 'opacity-100'}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[2px]">Date Range</label>
+                    <button onClick={() => toggleFilter('date')} className={`px-2 py-1 rounded-lg transition-all text-[10px] font-bold ${activeFilters.date ? 'bg-indigo-500 text-white shadow-md shadow-indigo-100' : 'bg-slate-100 text-slate-400'}`}>ON</button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input type="date" disabled={!activeFilters.date} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed" value={tempValues.startDate} onChange={(e) => setTempValues({...tempValues, startDate: e.target.value})} />
+                    <input type="date" disabled={!activeFilters.date} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed" value={tempValues.endDate} onChange={(e) => setTempValues({...tempValues, endDate: e.target.value})} />
+                  </div>
+                </div>
+                <div className={`${selectedPlatform === 'Line' ? 'xl:col-span-4' : 'xl:col-span-2'} transition-opacity duration-300 ${!activeFilters.category ? 'opacity-40' : 'opacity-100'}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[2px]">Category</label>
+                    <button onClick={() => toggleFilter('category')} className={`px-2 py-1 rounded-lg transition-all text-[10px] font-bold ${activeFilters.category ? 'bg-indigo-500 text-white shadow-md shadow-indigo-100' : 'bg-slate-100 text-slate-400'}`}>ON</button>
+                  </div>
+                  <div className="relative">
+                    <select disabled={!activeFilters.category} className="w-full appearance-none bg-slate-50 border-none rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none cursor-pointer disabled:cursor-not-allowed" value={tempValues.category} onChange={(e) => setTempValues({...tempValues, category: e.target.value})}>
+                      <option value="">All Categories</option>
+                      {availableCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+                {selectedPlatform !== 'Line' && (
+                  <div className={`xl:col-span-2 transition-opacity duration-300 ${!activeFilters.campaign ? 'opacity-40' : 'opacity-100'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-[2px]">Campaign</label>
+                      <button onClick={() => toggleFilter('campaign')} className={`px-2 py-1 rounded-lg transition-all text-[10px] font-bold ${activeFilters.campaign ? 'bg-indigo-500 text-white shadow-md shadow-indigo-100' : 'bg-slate-100 text-slate-400'}`}>ON</button>
+                    </div>
+                    <div className="relative">
+                      <select disabled={!activeFilters.campaign} className="w-full appearance-none bg-slate-50 border-none rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none cursor-pointer disabled:cursor-not-allowed" value={tempValues.campaign} onChange={(e) => setTempValues({...tempValues, campaign: e.target.value})}>
+                        <option value="">All Campaigns</option>
+                        {availableCampaigns.map(camp => <option key={camp} value={camp}>{camp}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-4 top-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
+                <div className={`xl:col-span-3 transition-opacity duration-300 ${!activeFilters.product ? 'opacity-40' : 'opacity-100'}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[2px]">Product Search</label>
+                    <button onClick={() => toggleFilter('product')} className={`px-2 py-1 rounded-lg transition-all text-[10px] font-bold ${activeFilters.product ? 'bg-indigo-500 text-white shadow-md shadow-indigo-100' : 'bg-slate-100 text-slate-400'}`}>ON</button>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
+                    <input type="text" disabled={!activeFilters.product} placeholder="Search by SKU name..." className="w-full bg-slate-50 border-none rounded-xl pl-11 pr-4 py-3 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none disabled:cursor-not-allowed" value={tempValues.productName} onChange={(e) => setTempValues({...tempValues, productName: e.target.value})} />
+                  </div>
+                </div>
+                <div className="xl:col-span-2 flex flex-col gap-2 w-full self-end md:col-span-2">
+                  <div className="flex gap-2">
+                    <button onClick={handleApply} disabled={isApplying} className={`flex-grow flex items-center justify-center gap-2 px-6 py-3 bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-slate-200 hover:bg-slate-900 active:scale-95 transition-all ${isApplying ? 'opacity-70' : ''}`}>
+                      {isApplying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} {isApplying ? 'Wait' : 'Apply'}
+                    </button>
+                    <button onClick={handleReset} className="p-3 bg-white text-slate-400 border border-slate-100 rounded-xl hover:bg-slate-50 transition-all active:scale-95 duration-200 shadow-sm"><RefreshCw className="w-5 h-5" /></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        const renderCustomizedPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+          const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+          const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
+          const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
+          return <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-[10px] font-bold">{`${(percent * 100).toFixed(0)}%`}</text>;
+        };
+
+        const CustomCategoryTooltip = ({ active, payload }) => {
+          if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return (
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xl min-w-[180px] z-50">
+                <div className="flex items-center gap-2 mb-3"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: data.color || payload[0].fill }} /><p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{data.name}</p></div>
+                <div className="space-y-2">
+                  {data.percentage !== undefined && <div className="flex justify-between items-center gap-4"><span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">% Contrib.</span><span className="text-[11px] font-black text-indigo-600">{data.percentage}%</span></div>}
+                  <div className="flex justify-between items-center gap-4"><span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">GMV</span><span className="text-[11px] font-black text-slate-800">฿{data.value !== undefined ? data.value.toLocaleString() : (data.gmv ? data.gmv.toLocaleString() : '0')}</span></div>
+                  {data.units !== undefined && <div className="flex justify-between items-center gap-4"><span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Item Sold</span><span className="text-[11px] font-black text-slate-800">{data.units.toLocaleString()}</span></div>}
+                </div>
+              </div>
+            );
+          }
+          return null;
+        };
+
+        const CustomTrendTooltip = ({ active, payload, label }) => {
+          if (active && payload && payload.length) {
+            return (
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xl min-w-[180px] z-50">
+                <p className="text-[12px] font-black text-slate-700 uppercase tracking-widest mb-3 border-b border-slate-50 pb-2">{label}</p>
+                <div className="space-y-2">
+                  {payload.map((entry, index) => (
+                    <div key={index} className="flex justify-between items-center gap-4">
+                      <div className="flex items-center gap-2">
+                         <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.stroke || entry.color || entry.fill }} />
+                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Year {entry.name}</span>
+                      </div>
+                      <span className="text-[11px] font-black text-slate-800">฿{entry.value ? entry.value.toLocaleString('th-TH') : '0'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          return null;
+        };
+
+        const MiniCompareBadge = ({ label, curr, prev, isPercent = false }) => {
+            if (prev === 0 && curr === 0) return null; 
+            let diffStr = ""; let isPos = true;
+            if (isPercent) {
+                const diff = curr - prev; isPos = diff >= 0;
+                diffStr = `${isPos ? '+' : ''}${diff.toFixed(1)}%`;
+            } else {
+                let pct = 0;
+                if (prev === 0) pct = curr > 0 ? 100 : 0;
+                else pct = ((curr - prev) / prev) * 100;
+                isPos = pct >= 0;
+                diffStr = `${isPos ? '+' : ''}${pct.toFixed(0)}%`;
+            }
+            return (
+                <span className={`inline-block text-[8px] font-black px-1 py-0.5 rounded mr-1 whitespace-nowrap ${isPos ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`} title={`${label} Prev Value: ${isPercent ? prev.toFixed(1)+'%' : prev.toLocaleString('th-TH')}`}>
+                    {label} {diffStr}
+                </span>
+            );
+        };
+
+        const ComparisonTag = ({ label, currentValue, prevValue, prefix = "", suffix = "" }) => {
+          const diffValue = currentValue - prevValue;
+          let pct = 0;
+          if (prevValue === 0) pct = currentValue > 0 ? 100 : 0;
+          else pct = ((currentValue - prevValue) / prevValue) * 100;
+          const isPositive = pct >= 0;
+          const formatVal = (num) => {
+            if (num === 0) return "0"; const absNum = Math.abs(num);
+            if (absNum >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+            if (absNum >= 1000) return (num / 1000).toFixed(1) + 'k';
+            return Number(num.toFixed(0)).toLocaleString('th-TH');
+          };
+          return (
+            <div className="flex flex-col gap-1 p-2.5 rounded-2xl bg-slate-50 border border-slate-100/50 hover:bg-white transition-all">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{label}</span>
+              <div className={`flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold w-fit ${isPositive ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                {isPositive ? <TrendingUp className="w-2.5 h-2.5 mr-0.5" /> : <TrendingDown className="w-2.5 h-2.5 mr-0.5" />} {Math.abs(pct).toFixed(1)}%
+              </div>
+              <div className="mt-1 flex flex-col gap-0.5">
+                <div className="flex justify-between text-[9px]"><span className="text-slate-400">Prev:</span><span className="text-slate-600 font-bold">{prefix}{formatVal(prevValue)}{suffix}</span></div>
+                <div className="flex justify-between text-[9px]"><span className="text-slate-400">Diff:</span><span className={`font-bold ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>{isPositive ? '+' : ''}{prefix}{formatVal(diffValue)}{suffix}</span></div>
+              </div>
+            </div>
+          );
+        };
+
+        const StatCard = ({ title, value, prefix = "", suffix = "", prevLy = 0, prevLw = 0, prevLm = 0 }) => {
+          const sparkData = useMemo(() => generateSparkData(), []);
+          return (
+            <div className="bg-white p-7 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:translate-y-[-4px] transition-all h-full flex flex-col group">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-slate-400 text-[11px] font-black uppercase tracking-widest">{title}</h3>
+                <div className="w-16 h-8 opacity-20 group-hover:opacity-60 transition-opacity">
+                   <ResponsiveContainer width="100%" height="100%"><LineChart data={sparkData}><Line type="monotone" dataKey="v" stroke="#6366f1" strokeWidth={2.5} dot={false} /></LineChart></ResponsiveContainer>
+                </div>
+              </div>
+              <div className="text-3xl lg:text-4xl font-bold text-slate-800 mb-6 tracking-tight">{prefix}{typeof value === 'number' ? value.toLocaleString('th-TH', { maximumFractionDigits: 2 }) : value}{suffix}</div>
+              <div className="grid grid-cols-3 gap-2 py-4 border-t border-slate-50">
+                <ComparisonTag label="VS LY" currentValue={value} prevValue={prevLy} prefix={prefix} suffix={suffix} />
+                <ComparisonTag label="VS LW" currentValue={value} prevValue={prevLw} prefix={prefix} suffix={suffix} />
+                <ComparisonTag label="VS LM" currentValue={value} prevValue={prevLm} prefix={prefix} suffix={suffix} />
+              </div>
+            </div>
+          );
+        };
+
+        const SectionTitle = ({ children, subtitle }) => (
+          <div className="mb-6"><h2 className="text-2xl font-bold text-slate-800 tracking-tighter">{children}</h2>{subtitle && <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{subtitle}</p>}</div>
+        );
+
+        const TargetAchievementCard = ({ actualGmv, targetGmv, activeMonth }) => {
+          const target = targetGmv || 0;
+          const actual = actualGmv || 0;
+          const overallPercent = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
+          let monthLabel = '';
+          if (activeMonth) {
+             const dateObj = new Date(activeMonth + '-01');
+             if (!isNaN(dateObj.getTime())) { monthLabel = dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }); }
+          }
+
+          return (
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+              <SectionTitle subtitle="Tracking aggregated actual sales against monthly target">Sales Target Achievement</SectionTitle>
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col justify-center">
+                <h3 className="text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider flex items-center gap-2">
+                   Total Sales Target {monthLabel && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-md normal-case font-bold">{monthLabel}</span>}
+                </h3>
+                <div className="flex items-end gap-2 mb-4">
+                    <span className="text-3xl font-bold text-slate-800">฿{(actual / 1000000).toFixed(2)}M</span>
+                    <span className="text-xs font-medium text-slate-400 mb-1.5">/ ฿{(target / 1000000).toFixed(1)}M</span>
+                </div>
+                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-3">
+                    <div className="h-full bg-indigo-500 rounded-full transition-all duration-1000" style={{ width: `${overallPercent}%` }}></div>
+                </div>
+                <div className="flex justify-between items-center text-[11px] font-bold">
+                    <span className="text-slate-500">Achieved</span>
+                    <span className="text-indigo-600">{overallPercent}%</span>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        // --- Modals ---
+
+        const DataSourceModal = ({ isOpen, onClose, urls, onSave, targets, onSaveTargets }) => {
+          const [tempUrls, setTempUrls] = useState(urls);
+          const [tempTargets, setTempTargets] = useState(targets);
+          const [editMonth, setEditMonth] = useState(() => {
+             const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          });
+          const [isAuthenticated, setIsAuthenticated] = useState(false);
+          const [passcode, setPasscode] = useState('');
+          const [errorMsg, setErrorMsg] = useState('');
+
+          useEffect(() => { 
+            setTempUrls(urls); setTempTargets(targets || {});
+            if (isOpen) { setIsAuthenticated(false); setPasscode(''); setErrorMsg(''); }
+          }, [urls, targets, isOpen]);
+
+          if (!isOpen) return null;
+
+          const handleChange = (platform, value) => { setTempUrls(prev => ({ ...prev, [platform]: value })); };
+          const handleSave = () => { onSave(tempUrls); onSaveTargets(tempTargets); onClose(); };
+          const handleLogin = () => {
+            if (passcode === ADMIN_PASSCODE) { setIsAuthenticated(true); setErrorMsg(''); } 
+            else { setErrorMsg('รหัสผ่านไม่ถูกต้อง (Incorrect Passcode)'); }
+          };
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+              <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
+                  <div className="flex items-center gap-3"><Database className="w-5 h-5 text-emerald-400" /><h2 className="text-lg font-bold">Data Sync Settings</h2></div>
+                  <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X className="w-5 h-5" /></button>
+                </div>
+
+                {!isAuthenticated ? (
+                  <div className="p-12 flex flex-col items-center justify-center space-y-5">
+                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-2"><Lock className="w-8 h-8 text-slate-400" /></div>
+                    <div className="text-center"><h3 className="text-lg font-bold text-slate-800">Admin Access Required</h3><p className="text-xs text-slate-500 mt-1">กรุณาใส่รหัสผ่านเพื่อตั้งค่า Data Source</p></div>
+                    <div className="w-full max-w-xs space-y-3">
+                      <input type="password" value={passcode} onChange={e => setPasscode(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-center outline-none focus:ring-2 focus:ring-indigo-500 font-bold tracking-widest" placeholder="••••••••" />
+                      {errorMsg && <p className="text-[11px] text-rose-500 text-center font-bold">{errorMsg}</p>}
+                      <button onClick={handleLogin} className="w-full py-3 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-all uppercase tracking-widest">Verify Access</button>
+                    </div>
+                  </div>
+                ) : (
+                  <Fragment>
+                    <div className="p-8 max-h-[60vh] overflow-y-auto space-y-6">
+                      <div className="mb-6 pb-6 border-b border-slate-100">
+                        <label className="block text-[11px] font-black text-slate-700 uppercase tracking-widest mb-2 flex items-center gap-2"><Target className="w-4 h-4 text-indigo-500" /> Monthly Sales Target (GMV)</label>
+                        <div className="flex gap-3">
+                           <input type="month" value={editMonth} onChange={(e) => setEditMonth(e.target.value)} className="w-1/3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none cursor-pointer" />
+                           <input type="number" placeholder="ระบุยอดเป้าหมาย (เช่น 4000000)" value={tempTargets[editMonth] || ''} onChange={(e) => setTempTargets(prev => ({ ...prev, [editMonth]: Number(e.target.value) }))} className="w-2/3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none" />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-2 font-medium">ยอดเป้าหมายจะเปลี่ยนตาม "เดือนที่ถูกเลือกใน Date Filter" อัตโนมัติ</p>
+                      </div>
+
+                      <p className="text-sm text-slate-500 font-medium">วางลิงก์ <b>Google Sheet (CSV)</b> ของแต่ละแพลตฟอร์ม เพื่ออัปเดตข้อมูลอัตโนมัติ<br/>(ไปที่ไฟล์ Google Sheet &gt; File &gt; Share &gt; Publish to web &gt; เลือกแบบ CSV)</p>
+                      {['Shopee', 'Lazada', 'Line', 'TikTok', 'Direct sales', 'B2B', 'Store'].map(platform => (
+                        <div key={platform}>
+                          <label className="block text-[11px] font-black text-slate-700 uppercase tracking-widest mb-2 flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: PLATFORM_COLORS[platform] }}></div>{platform} CSV URL</label>
+                          <input type="text" placeholder={`https://docs.google.com/spreadsheets/.../pub?output=csv`} value={tempUrls[platform] || ''} onChange={(e) => handleChange(platform, e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-6 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
+                      <button onClick={onClose} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors uppercase tracking-widest">Cancel</button>
+                      <button onClick={handleSave} className="px-6 py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition-colors flex items-center gap-2 uppercase tracking-widest"><Save className="w-4 h-4 mr-2" /> Save URLs</button>
+                    </div>
+                  </Fragment>
+                )}
+              </div>
+            </div>
+          );
+        };
+
+        // --- Map Component ---
+        const PROVINCE_MAP = {
+          "bangkok": "กรุงเทพมหานคร", "bkk": "กรุงเทพมหานคร", "กทม": "กรุงเทพมหานคร", "กทม.": "กรุงเทพมหานคร", "krung thep maha nakhon": "กรุงเทพมหานคร",
+          "samut prakan": "สมุทรปราการ", "samutprakan": "สมุทรปราการ",
+          "nonthaburi": "นนทบุรี",
+          "pathum thani": "ปทุมธานี", "pathumthani": "ปทุมธานี",
+          "phra nakhon si ayutthaya": "พระนครศรีอยุธยา", "ayutthaya": "พระนครศรีอยุธยา",
+          "ang thong": "อ่างทอง", "angthong": "อ่างทอง",
+          "lop buri": "ลพบุรี", "lopburi": "ลพบุรี",
+          "sing buri": "สิงห์บุรี", "singburi": "สิงห์บุรี",
+          "chai nat": "ชัยนาท", "chainat": "ชัยนาท",
+          "saraburi": "สระบุรี",
+          "chon buri": "ชลบุรี", "chonburi": "ชลบุรี",
+          "rayong": "ระยอง",
+          "chanthaburi": "จันทบุรี",
+          "trat": "ตราด",
+          "chachoengsao": "ฉะเชิงเทรา",
+          "prachin buri": "ปราจีนบุรี", "prachinburi": "ปราจีนบุรี",
+          "nakhon nayok": "นครนายก",
+          "sa kaeo": "สระแก้ว", "sakaeo": "สระแก้ว",
+          "nakhon ratchasima": "นครราชสีมา", "nakhonratchasima": "นครราชสีมา", "korat": "นครราชสีมา",
+          "buri ram": "บุรีรัมย์", "buriram": "บุรีรัมย์",
+          "surin": "สุรินทร์",
+          "si sa ket": "ศรีสะเกษ", "sisaket": "ศรีสะเกษ",
+          "ubon ratchathani": "อุบลราชธานี", "ubonratchathani": "อุบลราชธานี",
+          "yasothon": "ยโสธร",
+          "chaiyaphum": "ชัยภูมิ",
+          "amnat charoen": "อำนาจเจริญ", "amnatcharoen": "อำนาจเจริญ",
+          "nong bua lam phu": "หนองบัวลำภู", "nongbualamphu": "หนองบัวลำภู",
+          "khon kaen": "ขอนแก่น", "khonkaen": "ขอนแก่น",
+          "udon thani": "อุดรธานี", "udonthani": "อุดรธานี",
+          "loei": "เลย",
+          "nong khai": "หนองคาย", "nongkhai": "หนองคาย",
+          "maha sarakham": "มหาสารคาม", "mahasarakham": "มหาสารคาม",
+          "roi et": "ร้อยเอ็ด", "roiet": "ร้อยเอ็ด",
+          "kalasin": "กาฬสินธุ์",
+          "sakon nakhon": "สกลนคร", "sakonnakhon": "สกลนคร",
+          "nakhon phanom": "นครพนม", "nakhonphanom": "นครพนม",
+          "mukdahan": "มุกดาหาร",
+          "chiang mai": "เชียงใหม่", "chiangmai": "เชียงใหม่",
+          "lamphun": "ลำพูน",
+          "lampang": "ลำปาง",
+          "uttaradit": "อุตรดิตถ์",
+          "phrae": "แพร่",
+          "nan": "น่าน",
+          "phayao": "พะเยา",
+          "chiang rai": "เชียงราย", "chiangrai": "เชียงราย",
+          "mae hong son": "แม่ฮ่องสอน", "maehongson": "แม่ฮ่องสอน",
+          "nakhon sawan": "นครสวรรค์", "nakhonsawan": "นครสวรรค์",
+          "uthai thani": "อุทัยธานี", "uthaithani": "อุทัยธานี",
+          "kamphaeng phet": "กำแพงเพชร", "kamphaengphet": "กำแพงเพชร",
+          "tak": "ตาก",
+          "sukhothai": "สุโขทัย",
+          "phitsanulok": "พิษณุโลก",
+          "phichit": "พิจิตร",
+          "phetchabun": "เพชรบูรณ์",
+          "ratchaburi": "ราชบุรี",
+          "kanchanaburi": "กาญจนบุรี",
+          "suphan buri": "สุพรรณบุรี", "suphanburi": "สุพรรณบุรี",
+          "nakhon pathom": "นครปฐม", "nakhonpathom": "นครปฐม",
+          "samut sakhon": "สมุทรสาคร", "samutsakhon": "สมุทรสาคร",
+          "samut songkhram": "สมุทรสงคราม", "samutsongkhram": "สมุทรสงคราม",
+          "phetchaburi": "เพชรบุรี",
+          "prachuap khiri khan": "ประจวบคีรีขันธ์", "prachuapkhirikhan": "ประจวบคีรีขันธ์",
+          "nakhon si thammarat": "นครศรีธรรมราช", "nakhonsithammarat": "นครศรีธรรมราช",
+          "krabi": "กระบี่",
+          "chumphon": "ชุมพร",
+          "phangnga": "พังงา", "phang nga": "พังงา",
+          "phuket": "ภูเก็ต",
+          "surat thani": "สุราษฎร์ธานี", "suratthani": "สุราษฎร์ธานี",
+          "ranong": "ระนอง",
+          "songkhla": "สงขลา",
+          "satun": "สตูล",
+          "trang": "ตรัง",
+          "phatthalung": "พัทลุง",
+          "pattani": "ปัตตานี",
+          "yala": "ยะลา",
+          "narathiwat": "นราธิวาส",
+          "bueng kan": "บึงกาฬ", "buengkan": "บึงกาฬ"
+        };
+
+        const normalizeProvince = (prov) => {
+          if (!prov) return 'กรุงเทพมหานคร';
+          let str = String(prov).replace(/^จ\.|^จังหวัด|^province\sof\s|\sprovince$/gi, '').trim();
+          let lower = str.toLowerCase();
+          
+          if (lower.includes('กรุงเทพ') || lower.includes('bangkok') || lower === 'bkk' || lower === 'กทม' || lower === 'กทม.') {
+            return 'กรุงเทพมหานคร';
+          }
+          if (PROVINCE_MAP[lower]) return PROVINCE_MAP[lower];
+          
+          return str;
+        };
+
+        const ThailandHeatmap = ({ filteredProducts }) => {
+          const [tooltipContent, setTooltipContent] = useState("");
+          
+          const provinceData = useMemo(() => {
+            const grouped = {};
+            filteredProducts.forEach(p => {
+               const prov = normalizeProvince(p.province);
+               if (!grouped[prov]) grouped[prov] = { gmv: 0, sales: 0 };
+               grouped[prov].gmv += (p.gmv || 0);
+               grouped[prov].sales += (p.sales || 0);
+            });
+            return grouped;
+          }, [filteredProducts]);
+
+          const maxGmv = useMemo(() => {
+             return Math.max(0, ...Object.values(provinceData).map(d => d.gmv));
+          }, [provinceData]);
+
+          const topProvinces = useMemo(() => {
+             return Object.entries(provinceData)
+               .map(([name, data]) => ({ name, ...data }))
+               .sort((a, b) => b.gmv - a.gmv)
+               .slice(0, 10);
+          }, [provinceData]);
+
+          // GeoJSON TopoJSON for Thailand
+          const geoUrl = "https://raw.githubusercontent.com/apisit/thailand.json/master/thailand.json";
+
+          const getHeatmapColor = (val, max) => {
+            if (!val || val === 0) return '#e2e8f0'; 
+            const r = val / max;
+            if (r >= 0.3) return '#b91c1c'; // Red (Very High)
+            if (r >= 0.1) return '#ea580c'; // Orange (High)
+            if (r >= 0.02) return '#f59e0b'; // Amber (Medium)
+            return '#fde047'; // Bright Yellow (Low)
+          };
+
+          return (
+             <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex flex-col lg:flex-row gap-10">
+                <div className="w-full lg:w-1/2 relative h-[500px] bg-slate-50/50 rounded-[32px] overflow-hidden border border-slate-100 flex items-center justify-center p-4">
+                   <ComposableMap projection="geoMercator" projectionConfig={{ scale: 2000, center: [101.5, 13.5] }} style={{ width: "100%", height: "100%" }}>
+                      <Geographies geography={geoUrl}>
+                        {({ geographies }) =>
+                          geographies.map((geo) => {
+                            const provName = geo.properties.name || geo.properties.NAME_1 || geo.properties.nameth || '';
+                            const normalizedGeoProv = normalizeProvince(provName);
+                            
+                            let val = 0;
+                            let matchedProv = normalizedGeoProv;
+                            
+                            const pKey = Object.keys(provinceData).find(k => {
+                               const normK = k.replace(/\s+/g, '').toLowerCase();
+                               const normGeo = normalizedGeoProv.replace(/\s+/g, '').toLowerCase();
+                               return normGeo === normK || normGeo.includes(normK) || normK.includes(normGeo);
+                            });
+                            
+                            if (pKey) {
+                               val = provinceData[pKey].gmv;
+                               matchedProv = pKey;
+                            }
+
+                            const color = getHeatmapColor(val, maxGmv);
+
+                            return (
+                              <Geography
+                                key={geo.rsmKey}
+                                geography={geo}
+                                fill={color}
+                                stroke="#ffffff"
+                                strokeWidth={0.5}
+                                onMouseEnter={() => {
+                                   if (val > 0) setTooltipContent(`${matchedProv}: ฿${val.toLocaleString()}`);
+                                   else setTooltipContent(`${normalizedGeoProv}: No Sales`);
+                                }}
+                                onMouseLeave={() => setTooltipContent("")}
+                                style={{ 
+                                    hover: { fill: val > 0 ? "#4f46e5" : "#cbd5e1", outline: "none", cursor: "pointer" }, 
+                                    default: { outline: "none" }, 
+                                    pressed: { outline: "none" } 
+                                }}
+                              />
+                            )
+                          })
+                        }
+                      </Geographies>
+                   </ComposableMap>
+                   {tooltipContent && <div className="absolute top-6 right-6 bg-slate-900/90 backdrop-blur-sm text-white px-4 py-2.5 rounded-xl text-xs font-black tracking-widest shadow-xl pointer-events-none z-10">{tooltipContent}</div>}
+                   
+                   <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-slate-100 flex flex-col gap-2">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">GMV Density</p>
+                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#b91c1c]"></div><span className="text-[10px] font-bold text-slate-600">Very High</span></div>
+                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#ea580c]"></div><span className="text-[10px] font-bold text-slate-600">High</span></div>
+                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#f59e0b]"></div><span className="text-[10px] font-bold text-slate-600">Medium</span></div>
+                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#fde047]"></div><span className="text-[10px] font-bold text-slate-600">Low</span></div>
+                      <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#e2e8f0]"></div><span className="text-[10px] font-bold text-slate-600">No Data</span></div>
+                   </div>
+                </div>
+
+                <div className="w-full lg:w-1/2 flex flex-col justify-center">
+                   <SectionTitle subtitle="High volume regions">Top 10 Provinces by GMV</SectionTitle>
+                   <div className="space-y-4">
+                      {topProvinces.map((prov, idx) => {
+                         const percent = maxGmv > 0 ? (prov.gmv / maxGmv) * 100 : 0;
+                         return (
+                           <div key={idx} className="flex flex-col gap-1.5 p-3 hover:bg-slate-50 rounded-2xl transition-all">
+                              <div className="flex justify-between items-end">
+                                 <span className="text-xs font-bold text-slate-700 flex items-center gap-2"><MapPin className="w-3 h-3 text-indigo-500" /> {prov.name}</span>
+                                 <span className="text-xs font-black text-slate-900">฿{prov.gmv.toLocaleString()}</span>
+                              </div>
+                              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                 <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full" style={{ width: `${percent}%` }}></div>
+                              </div>
+                           </div>
+                         )
+                      })}
+                   </div>
+                </div>
+             </div>
+          )
+        };
+
+        const PlatformDetailView = ({ selectedPlatform, onBack, platformData, isGlobalLoading, filterCriteria, setFilterCriteria, fetchErrors }) => {
+          const [skuSortMetric, setSkuSortMetric] = useState('volume');
+          const [showCompareTable, setShowCompareTable] = useState(false); 
+          const [heatmapYear, setHeatmapYear] = useState(new Date().getFullYear());
+          const [hideZeroSales, setHideZeroSales] = useState(true);
+
+          const hasDateFilter = useMemo(() => {
+             return filterCriteria.activeFilters?.date && !!filterCriteria.tempValues?.startDate && !!filterCriteria.tempValues?.endDate;
+          }, [filterCriteria]);
+
+          useEffect(() => { if (!hasDateFilter) setShowCompareTable(false); }, [hasDateFilter]);
+
+          const availableCategories = useMemo(() => {
+             const categories = new Set(platformData.map(item => item.category)); return Array.from(categories).filter(Boolean).sort();
+          }, [platformData]);
+
+          const availableCampaigns = useMemo(() => {
+             const campaigns = new Set(platformData.map(item => item.campaign)); return Array.from(campaigns).filter(Boolean).sort();
+          }, [platformData]);
+
+          const availableYears = useMemo(() => {
+            const years = new Set();
+            platformData.forEach(p => {
+               if (p.date) {
+                 const y = new Date(`${p.date}T12:00:00`).getFullYear();
+                 if (!isNaN(y)) years.add(y);
+               }
+            });
+            const sorted = Array.from(years).sort((a,b) => b - a);
+            return sorted.length > 0 ? sorted : [new Date().getFullYear()];
+          }, [platformData]);
+
+          const activeHeatmapYear = availableYears.includes(heatmapYear) ? heatmapYear : availableYears[0];
+
+          const filteredProducts = useMemo(() => {
+            const { activeFilters, tempValues } = filterCriteria;
+            return platformData.filter(p => {
+              let match = true;
+              if (activeFilters?.date) {
+                if (!p.date) match = false;
+                else {
+                  const itemDate = new Date(`${p.date}T12:00:00`);
+                  if (isNaN(itemDate.getTime())) match = false;
+                  else {
+                    if (tempValues.startDate) { const start = new Date(`${tempValues.startDate}T00:00:00`); if (itemDate < start) match = false; }
+                    if (tempValues.endDate) { const end = new Date(`${tempValues.endDate}T23:59:59`); if (itemDate > end) match = false; }
+                  }
+                }
+              }
+              if (activeFilters?.category && tempValues?.category) { match = match && p.category === tempValues.category; }
+              if (activeFilters?.campaign && tempValues?.campaign) { match = match && p.campaign === tempValues.campaign; }
+              if (activeFilters?.product && tempValues?.productName) { match = match && p.name.toLowerCase().includes(tempValues.productName.toLowerCase()); }
+              return match;
+            });
+          }, [filterCriteria, platformData]);
+
+          const kpis = useMemo(() => {
+            const { activeFilters, tempValues } = filterCriteria;
+            const baseData = platformData.filter(p => {
+              let match = true;
+              if (activeFilters?.category && tempValues?.category) { match = match && p.category === tempValues.category; }
+              if (activeFilters?.campaign && tempValues?.campaign) { match = match && p.campaign === tempValues.campaign; }
+              if (activeFilters?.product && tempValues?.productName) { match = match && p.name.toLowerCase().includes(tempValues.productName.toLowerCase()); }
+              return match;
+            });
+
+            const calc = (dataToCalc) => {
+              let gmv = 0, sales = 0, visitors = 0, views = 0;
+              dataToCalc.forEach(p => { 
+                if (!p.id.includes('Direct-Catalog-') && !p.id.includes('Store-Catalog-')) {
+                   gmv += p.gmv || 0; sales += p.sales || 0; visitors += p.visitors || 0; views += p.views || 0; 
+                }
+              });
+              const aov = sales > 0 ? Math.round(gmv / sales) : 0;
+              const cr = visitors > 0 ? Number(((sales / visitors) * 100).toFixed(2)) : 0;
+              return { gmv, sales, aov, visitors, views, cr };
+            };
+
+            if (!activeFilters?.date || !tempValues.startDate || !tempValues.endDate) {
+               return { current: calc(baseData), lw: calc([]), lm: calc([]), ly: calc([]) };
+            }
+
+            const startCurr = new Date(`${tempValues.startDate}T00:00:00`); const endCurr = new Date(`${tempValues.endDate}T23:59:59`);
+            const startLW = shiftDateLW(startCurr); startLW.setHours(0,0,0,0); const endLW = shiftDateLW(endCurr); endLW.setHours(23,59,59,999);
+            const startLM = shiftDateLM(startCurr); startLM.setHours(0,0,0,0); const endLM = shiftDateLM(endCurr); endLM.setHours(23,59,59,999);
+            const startLY = shiftDateLY(startCurr); startLY.setHours(0,0,0,0); const endLY = shiftDateLY(endCurr); endLY.setHours(23,59,59,999);
+
+            const currentData = [], lwData = [], lmData = [], lyData = [];
+            baseData.forEach(p => {
+               if(!p.date || p.id.includes('Direct-Catalog-') || p.id.includes('Store-Catalog-')) return; 
+               const d = new Date(`${p.date}T12:00:00`);
+               if (isNaN(d.getTime())) return;
+               if (d >= startCurr && d <= endCurr) currentData.push(p);
+               if (d >= startLW && d <= endLW) lwData.push(p);
+               if (d >= startLM && d <= endLM) lmData.push(p);
+               if (d >= startLY && d <= endLY) lyData.push(p);
+            });
+
+            return { current: calc(currentData), lw: calc(lwData), lm: calc(lmData), ly: calc(lyData) };
+          }, [filterCriteria, platformData]);
+
+          const dynamicCategoryData = useMemo(() => {
+            const grouped = {};
+            filteredProducts.forEach(p => {
+              if (p.id.includes('Direct-Catalog-') || p.id.includes('Store-Catalog-')) return;
+              if (!grouped[p.category]) grouped[p.category] = { gmv: 0, units: 0 };
+              grouped[p.category].gmv += (p.gmv || 0); grouped[p.category].units += (p.sales || 0);
+            });
+            const totalGmv = Object.values(grouped).reduce((acc, curr) => acc + curr.gmv, 0);
+            return Object.entries(grouped).map(([name, data], idx) => ({
+              name, gmv: data.gmv, units: data.units, percentage: totalGmv > 0 ? Math.round((data.gmv / totalGmv) * 100) : 0, color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length]
+            })).sort((a,b) => b.gmv - a.gmv);
+          }, [filteredProducts]);
+
+          const dynamicCampaignData = useMemo(() => {
+            const grouped = {};
+            filteredProducts.forEach(p => {
+              if (p.id.includes('Direct-Catalog-') || p.id.includes('Store-Catalog-')) return;
+              if (!grouped[p.campaign]) grouped[p.campaign] = { gmv: 0, units: 0 };
+              grouped[p.campaign].gmv += (p.gmv || 0); grouped[p.campaign].units += (p.sales || 0);
+            });
+            const totalGmv = Object.values(grouped).reduce((acc, curr) => acc + curr.gmv, 0);
+            return Object.entries(grouped).map(([name, data], idx) => ({
+              name, gmv: data.gmv, units: data.units, percentage: totalGmv > 0 ? Math.round((data.gmv / totalGmv) * 100) : 0, color: CAMPAIGN_COLORS[idx % CAMPAIGN_COLORS.length]
+            })).sort((a,b) => b.gmv - a.gmv);
+          }, [filteredProducts]);
+
+          const aggregatedProducts = useMemo(() => {
+            const { activeFilters, tempValues } = filterCriteria;
+            const grouped = {};
+
+            const matchesNonDateFilters = (p) => {
+              let match = true;
+              if (activeFilters?.category && tempValues?.category) { match = match && p.category === tempValues.category; }
+              if (activeFilters?.campaign && tempValues?.campaign) { match = match && p.campaign === tempValues.campaign; }
+              if (activeFilters?.product && tempValues?.productName) { match = match && p.name.toLowerCase().includes(tempValues.productName.toLowerCase()); }
+              return match;
+            };
+
+            // Pre-fill categories so that ALL platform catalog items show up
+            platformData.forEach(p => {
+               if (matchesNonDateFilters(p)) {
+                  if (!grouped[p.name]) {
+                      grouped[p.name] = { 
+                          ...p, 
+                          curr: { gmv: 0, sales: 0, visitors: 0, views: 0 }, 
+                          lw: { gmv: 0, sales: 0, visitors: 0, views: 0 }, 
+                          lm: { gmv: 0, sales: 0, visitors: 0, views: 0 }, 
+                          ly: { gmv: 0, sales: 0, visitors: 0, views: 0 }, 
+                          growthSum: 0, 
+                          count: 0 
+                      };
+                  }
+               }
+            });
+
+            let startCurr, endCurr, startLW, endLW, startLM, endLM, startLY, endLY;
+            if (hasDateFilter) {
+              startCurr = new Date(`${tempValues.startDate}T00:00:00`); endCurr = new Date(`${tempValues.endDate}T23:59:59`);
+              startLW = shiftDateLW(startCurr); startLW.setHours(0,0,0,0); endLW = shiftDateLW(endCurr); endLW.setHours(23,59,59,999);
+              startLM = shiftDateLM(startCurr); startLM.setHours(0,0,0,0); endLM = shiftDateLM(endCurr); endLM.setHours(23,59,59,999);
+              startLY = shiftDateLY(startCurr); startLY.setHours(0,0,0,0); endLY = shiftDateLY(endCurr); endLY.setHours(23,59,59,999);
+            }
+
+            platformData.forEach(p => {
+              if (!matchesNonDateFilters(p)) return;
+              if (p.id.includes('Direct-Catalog-') || p.id.includes('Store-Catalog-')) return; // Skip dummy entries
+
+              const key = p.name;
+              if (!hasDateFilter) {
+                grouped[key].curr.gmv += (p.gmv || 0); grouped[key].curr.sales += (p.sales || 0); grouped[key].curr.visitors += (p.visitors || 0); grouped[key].curr.views += (p.views || 0); grouped[key].growthSum += (p.growth || 0); 
+                if (p.gmv > 0 || p.sales > 0) grouped[key].count += 1;
+              } else {
+                if (!p.date) return; const d = new Date(`${p.date}T12:00:00`);
+                if (isNaN(d.getTime())) return;
+                
+                if (d >= startCurr && d <= endCurr) { grouped[key].curr.gmv += (p.gmv || 0); grouped[key].curr.sales += (p.sales || 0); grouped[key].curr.visitors += (p.visitors || 0); grouped[key].curr.views += (p.views || 0); }
+                if (d >= startLW && d <= endLW) { grouped[key].lw.gmv += (p.gmv || 0); grouped[key].lw.sales += (p.sales || 0); grouped[key].lw.visitors += (p.visitors || 0); }
+                if (d >= startLM && d <= endLM) { grouped[key].lm.gmv += (p.gmv || 0); grouped[key].lm.sales += (p.sales || 0); grouped[key].lm.visitors += (p.visitors || 0); }
+                if (d >= startLY && d <= endLY) { grouped[key].ly.gmv += (p.gmv || 0); grouped[key].ly.sales += (p.sales || 0); grouped[key].ly.visitors += (p.visitors || 0); }
+              }
+            });
+
+            return Object.values(grouped).map(g => {
+              g.curr.cr = g.curr.visitors > 0 ? Number(((g.curr.sales / g.curr.visitors) * 100).toFixed(2)) : 0;
+              g.lw.cr = g.lw.visitors > 0 ? Number(((g.lw.sales / g.lw.visitors) * 100).toFixed(2)) : 0;
+              g.lm.cr = g.lm.visitors > 0 ? Number(((g.lm.sales / g.lm.visitors) * 100).toFixed(2)) : 0;
+              g.ly.cr = g.ly.visitors > 0 ? Number(((g.ly.sales / g.ly.visitors) * 100).toFixed(2)) : 0;
+
+              let calculatedGrowth = 0;
+              if (!hasDateFilter) { calculatedGrowth = g.count > 0 ? Number((g.growthSum / g.count).toFixed(2)) : 0; } 
+              else {
+                  const currVal = skuSortMetric === 'volume' ? g.curr.sales : g.curr.gmv;
+                  const prevVal = skuSortMetric === 'volume' ? g.lw.sales : g.lw.gmv;
+                  if (prevVal === 0) calculatedGrowth = currVal > 0 ? 100 : 0; else calculatedGrowth = ((currVal - prevVal) / prevVal) * 100;
+              }
+              return { ...g, gmv: g.curr.gmv, sales: g.curr.sales, visitors: g.curr.visitors, views: g.curr.views, cr: g.curr.cr, growth: Number(calculatedGrowth.toFixed(2)) };
+            });
+          }, [filterCriteria, platformData, skuSortMetric, hasDateFilter]);
+
+          const topPerformers = useMemo(() => { return [...aggregatedProducts].sort((a, b) => skuSortMetric === 'volume' ? b.sales - a.sales : b.gmv - a.gmv).slice(0, 4); }, [aggregatedProducts, skuSortMetric]);
+          const decliningSkus = useMemo(() => { return [...aggregatedProducts].filter(p => p.growth < 0).sort((a, b) => a.growth - b.growth).slice(0, 4); }, [aggregatedProducts]);
+          
+          const groupedProducts = useMemo(() => {
+            let filtered = aggregatedProducts;
+            if (hideZeroSales) {
+                filtered = filtered.filter(p => p.sales > 0 || p.gmv > 0);
+            }
+            // เรียงลำดับสินค้าจาก GMV มากไปน้อย ภายในหมวดหมู่
+            const sorted = [...filtered].sort((a, b) => b.gmv - a.gmv);
+            return sorted.reduce((acc, p) => { 
+                if (!acc[p.category]) acc[p.category] = []; 
+                acc[p.category].push(p); 
+                return acc; 
+            }, {});
+          }, [aggregatedProducts, hideZeroSales]);
+
+          const trendData = useMemo(() => {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const grouped = {};
+            months.forEach(m => grouped[m] = { month: m, gmv2025: 0, gmv2026: 0 });
+            platformData.forEach(p => {
+                if(!p.date || p.id.includes('Direct-Catalog-') || p.id.includes('Store-Catalog-')) return; 
+                const d = new Date(`${p.date}T12:00:00`);
+                if (isNaN(d.getTime())) return;
+                const m = months[d.getMonth()]; const y = d.getFullYear();
+                if (y === 2025) grouped[m].gmv2025 += p.gmv; if (y === 2026) grouped[m].gmv2026 += p.gmv;
+            });
+            return Object.values(grouped);
+          }, [platformData]);
+
+          const dayOfWeekData = useMemo(() => {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const data = {};
+            const maxPerMonth = {};
+            
+            days.forEach(day => { data[day] = {}; months.forEach(month => { data[day][month] = 0; }); });
+            
+            platformData.forEach(p => {
+               if(!p.date || p.id.includes('Direct-Catalog-') || p.id.includes('Store-Catalog-')) return;
+               const d = new Date(`${p.date}T12:00:00`);
+               if (isNaN(d.getTime())) return;
+               if (d.getFullYear() === activeHeatmapYear) {
+                  const day = days[d.getDay()];
+                  const month = months[d.getMonth()];
+                  data[day][month] += (p.gmv || 0);
+               }
+            });
+            
+            months.forEach(month => {
+               maxPerMonth[month] = 0;
+               days.forEach(day => { if (data[day][month] > maxPerMonth[month]) maxPerMonth[month] = data[day][month]; });
+            });
+            
+            return { data, days, months, maxPerMonth };
+          }, [platformData, activeHeatmapYear]);
+
+          const dailyMatrixData = useMemo(() => {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const data = {};
+            const maxPerMonth = {};
+            
+            months.forEach((month, mIndex) => {
+              data[month] = {};
+              const daysInMonth = new Date(activeHeatmapYear, mIndex + 1, 0).getDate(); 
+              for (let d = 1; d <= 31; d++) {
+                if (d <= daysInMonth) data[month][d] = 0;
+                else data[month][d] = null;
+              }
+            });
+
+            platformData.forEach(p => {
+               if(!p.date || p.id.includes('Direct-Catalog-') || p.id.includes('Store-Catalog-')) return;
+               const d = new Date(`${p.date}T12:00:00`);
+               if (isNaN(d.getTime())) return;
+               if (d.getFullYear() === activeHeatmapYear) {
+                  const month = months[d.getMonth()];
+                  const dateNum = d.getDate();
+                  if (data[month][dateNum] !== null) {
+                     data[month][dateNum] += (p.gmv || 0);
+                  }
+               }
+            });
+
+            months.forEach(month => {
+              maxPerMonth[month] = 0;
+              for (let d = 1; d <= 31; d++) {
+                if (data[month][d] && data[month][d] > maxPerMonth[month]) maxPerMonth[month] = data[month][d];
+              }
+            });
+            
+            return { data, months, maxPerMonth };
+          }, [platformData, activeHeatmapYear]);
+
+          if (isGlobalLoading) {
+            return (
+               <div className="p-20 text-center flex flex-col items-center justify-center animate-in fade-in duration-500">
+                 <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin mb-4" />
+                 <p className="text-slate-500 font-bold">Syncing live data from Google Sheets...</p>
+               </div>
+            );
+          }
+
+          if (!platformData || platformData.length === 0) {
+             const errorMsg = fetchErrors?.[selectedPlatform];
+             return (
+               <div className="p-20 text-center flex flex-col items-center justify-center animate-in fade-in duration-500 bg-white rounded-[40px] border border-slate-100 shadow-sm relative">
+                 <div className="flex items-center justify-between w-full absolute top-8 px-10">
+                    <button onClick={onBack} className="group flex items-center text-sm font-black text-slate-400 hover:text-indigo-600 transition-all uppercase tracking-widest"><ChevronLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" /> Back</button>
+                 </div>
+                 {errorMsg ? <AlertCircle className="w-12 h-12 text-rose-400 mb-4" /> : <Database className="w-12 h-12 text-slate-300 mb-4 opacity-50" />}
+                 <p className="text-slate-800 font-bold text-lg mb-2">{errorMsg ? "Data Sync Failed" : "No Data Available"}</p>
+                 <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">{errorMsg ? errorMsg : `ไม่มีข้อมูลสำหรับ ${selectedPlatform} หรือข้อมูลไม่ตรงกับฟิลเตอร์ที่เลือกไว้`}</p>
+               </div>
+             );
+          }
+
+          return (
+            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-24">
+              <div className="flex items-center justify-between">
+                <button onClick={onBack} className="group flex items-center text-sm font-black text-slate-400 hover:text-indigo-600 transition-all uppercase tracking-widest">
+                  <ChevronLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" /> Back to Dashboard
+                </button>
+                <div className="flex items-center gap-3">
+                   <div className="flex flex-col items-end">
+                     <div className="flex items-center gap-1.5">
+                       <Database className="w-3 h-3 text-emerald-500" />
+                       <span className="text-xs font-black text-emerald-600 uppercase tracking-[2px]">Live Sync</span>
+                     </div>
+                     <span className="text-[9px] text-slate-400 font-bold uppercase">{selectedPlatform} Data</span>
+                   </div>
+                </div>
+              </div>
+
+              <FilterBar onApply={(f) => setFilterCriteria(f)} selectedPlatform={selectedPlatform} availableCategories={availableCategories} availableCampaigns={availableCampaigns} currentFilters={filterCriteria} />
+
+              <div className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm">
+                <div className="flex items-center gap-5 mb-10"><div className="w-16 h-16 text-white rounded-3xl flex items-center justify-center font-bold text-2xl uppercase shadow-2xl" style={{ backgroundColor: PLATFORM_COLORS[selectedPlatform] }}>{selectedPlatform[0]}</div><div><h2 className="text-3xl font-bold text-slate-800 tracking-tighter">{selectedPlatform} Performance</h2><p className="text-sm text-slate-400 font-bold uppercase tracking-widest">Real-time metrics overview</p></div></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  <StatCard title="GMV" value={kpis.current.gmv} prefix="฿" prevLy={kpis.ly.gmv} prevLw={kpis.lw.gmv} prevLm={kpis.lm.gmv} />
+                  <StatCard title="Items Sold" value={kpis.current.sales} prevLy={kpis.ly.sales} prevLw={kpis.lw.sales} prevLm={kpis.lm.sales} />
+                  <StatCard title="AOV" value={kpis.current.aov} prefix="฿" prevLy={kpis.ly.aov} prevLw={kpis.lw.aov} prevLm={kpis.lm.aov} />
+                  {!['Line', 'TikTok', 'Lazada', 'Direct sales', 'B2B', 'Store'].includes(selectedPlatform) && (
+                    <Fragment>
+                      <StatCard title="CR%" value={kpis.current.cr} suffix="%" prevLy={kpis.ly.cr} prevLw={kpis.lw.cr} prevLm={kpis.lm.cr} />
+                      <StatCard title="Page View" value={kpis.current.views} prevLy={kpis.ly.views} prevLw={kpis.lw.views} prevLm={kpis.lm.views} />
+                      <StatCard title="Visitors" value={kpis.current.visitors} prevLy={kpis.ly.visitors} prevLw={kpis.lw.visitors} prevLm={kpis.lm.visitors} />
+                    </Fragment>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm">
+                <div className="flex justify-between items-center mb-10"><SectionTitle subtitle="Monthly aggregated performance">GMV Trend (2026 vs 2025)</SectionTitle><div className="flex items-center gap-6"><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full shadow-sm" style={{backgroundColor: PLATFORM_COLORS[selectedPlatform]}} /><span className="text-[10px] font-bold text-slate-500 uppercase">2026</span></div><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-300" /><span className="text-[10px] font-bold text-slate-400 uppercase">2025</span></div></div></div>
+                <div className="h-[350px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs><linearGradient id="detailGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={PLATFORM_COLORS[selectedPlatform]} stopOpacity={0.2}/><stop offset="95%" stopColor={PLATFORM_COLORS[selectedPlatform]} stopOpacity={0}/></linearGradient></defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: '600'}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11}} tickFormatter={(v) => `฿${(v/1000).toLocaleString()}k`} />
+                      <Tooltip content={<CustomTrendTooltip />} />
+                      <Area type="monotone" dataKey="gmv2025" stroke="#cbd5e1" strokeWidth={2} strokeDasharray="5 5" fill="transparent" name="2025" />
+                      <Area type="monotone" dataKey="gmv2026" stroke={PLATFORM_COLORS[selectedPlatform]} strokeWidth={3} fillOpacity={1} fill="url(#detailGradient)" name="2026" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className={`grid grid-cols-1 ${(!['Line', 'Direct sales', 'B2B', 'Store'].includes(selectedPlatform)) ? 'lg:grid-cols-2' : 'max-w-3xl mx-auto'} gap-10`}>
+                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex flex-col h-full">
+                  <SectionTitle subtitle="Share by Category">Product Breakdown</SectionTitle>
+                  <div className="h-[260px] relative mb-4"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={dynamicCategoryData} innerRadius={80} outerRadius={110} paddingAngle={4} dataKey="gmv" labelLine={false} label={renderCustomizedPieLabel}>{dynamicCategoryData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />)}</Pie><Tooltip content={CustomCategoryTooltip} cursor={{fill: 'transparent'}} /></PieChart></ResponsiveContainer></div>
+                  <PieChartLegend data={dynamicCategoryData} />
+                </div>
+                {(!['Line', 'Direct sales', 'B2B', 'Store'].includes(selectedPlatform)) && (
+                  <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex flex-col h-full">
+                    <SectionTitle subtitle="Promo contribution">Campaign Breakdown</SectionTitle>
+                    <div className="h-[260px] relative mb-4"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={dynamicCampaignData} innerRadius={80} outerRadius={110} paddingAngle={4} dataKey="gmv" labelLine={false} label={renderCustomizedPieLabel}>{dynamicCampaignData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />)}</Pie><Tooltip content={CustomCategoryTooltip} cursor={{fill: 'transparent'}} /></PieChart></ResponsiveContainer></div>
+                    <PieChartLegend data={dynamicCampaignData} />
+                  </div>
+                )}
+              </div>
+
+              {/* Heatmaps */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex flex-col">
+                  <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-800 tracking-tighter">Day Performance Heatmap</h2>
+                    </div>
+                    <div className="relative">
+                      <select 
+                        className="appearance-none bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-9 py-2 text-xs font-bold text-slate-800 outline-none cursor-pointer hover:bg-slate-100 transition-all shadow-sm"
+                        value={activeHeatmapYear}
+                        onChange={(e) => setHeatmapYear(Number(e.target.value))}
+                      >
+                        {availableYears.map(year => <option key={year} value={year}>Year {year}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-3 top-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto custom-scrollbar flex-grow">
+                    <table className="w-full border-collapse text-center table-fixed">
+                      <thead>
+                        <tr>
+                          <th className="w-16 md:w-20 p-1 md:p-2 border-b border-slate-100 sticky left-0 bg-white z-10"></th>
+                          {dayOfWeekData.months.map(m => (<th key={m} className="p-1 md:p-2 text-[9px] md:text-[11px] font-bold text-slate-800 border-b border-slate-100">{m}</th>))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dayOfWeekData.days.map((day) => (
+                          <tr key={day} className="hover:bg-slate-50/50">
+                            <td className="p-1 md:p-2 text-left text-[9px] md:text-[11px] font-bold text-slate-600 border-b border-slate-50 sticky left-0 bg-white z-10">{day}</td>
+                            {dayOfWeekData.months.map(month => { 
+                              const v = dayOfWeekData.data[day][month]; 
+                              const maxInMonth = dayOfWeekData.maxPerMonth[month];
+                              const i = maxInMonth > 0 ? Math.max(0.05, v / maxInMonth) : 0.05; 
+                              return (
+                                <td key={`${day}-${month}`} className="p-0.5 md:p-1 border-b border-slate-50">
+                                  <div className="w-full h-6 md:h-8 rounded-md relative flex items-center justify-center transition-all hover:scale-110 hover:z-10 cursor-pointer" style={{ backgroundColor: `rgba(79, 70, 229, ${i})` }}>
+                                    <div className={`absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 rounded-md text-[7px] md:text-[9px] font-bold ${i > 0.4 ? 'text-white' : 'text-slate-800'}`} title={`${day}: ฿${v.toLocaleString()}`}>{v > 0 ? `${Math.round(v/1000)}k` : '0'}</div>
+                                  </div>
+                                </td>
+                              ); 
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex flex-col">
+                  <SectionTitle>Daily Performance</SectionTitle>
+                  <div className="overflow-x-auto custom-scrollbar flex-grow">
+                    <table className="w-full border-collapse text-center table-fixed">
+                      <thead>
+                        <tr>
+                          <th className="w-8 md:w-10 p-0.5 md:p-1 border-b border-slate-100 sticky left-0 bg-white z-10"></th>
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (<th key={d} className="p-0.5 text-[7px] md:text-[9px] font-bold text-slate-800 border-b border-slate-100">{d}</th>))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dailyMatrixData.months.map((month) => (
+                          <tr key={month} className="hover:bg-slate-50/50">
+                            <td className="p-0.5 md:p-1 text-left text-[8px] md:text-[10px] font-bold text-slate-600 border-b border-slate-50 sticky left-0 bg-white z-10">{month}</td>
+                            {Array.from({ length: 31 }, (_, i) => i + 1).map(d => { 
+                              const v = dailyMatrixData.data[month][d]; 
+                              if (v === null) return <td key={`${month}-${d}`} className="p-0.5 border-b border-slate-50"><div className="w-full h-4 md:h-5 bg-transparent"></div></td>; 
+                              const maxInMonth = dailyMatrixData.maxPerMonth[month];
+                              const i = maxInMonth > 0 ? Math.max(0.05, v / maxInMonth) : 0.05; 
+                              return (
+                                <td key={`${month}-${d}`} className="p-0.5 border-b border-slate-50">
+                                  <div className="w-full h-4 md:h-5 rounded-sm relative flex items-center justify-center transition-all hover:scale-150 hover:z-10 cursor-pointer shadow-sm hover:shadow-lg" style={{ backgroundColor: `rgba(79, 70, 229, ${i})` }}>
+                                    <div className={`absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 rounded-sm text-[5px] md:text-[7px] font-bold ${i > 0.4 ? 'text-white' : 'text-slate-800'}`} title={`${d} ${month}: ฿${v.toLocaleString()}`}>{v > 0 ? `${Math.round(v/1000)}k` : '0'}</div>
+                                  </div>
+                                </td>
+                              ); 
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-end mb-4">
+                  <div className="bg-slate-200/60 p-1 rounded-xl flex text-[10px] font-black uppercase tracking-widest">
+                     <button onClick={() => setSkuSortMetric('volume')} className={`px-5 py-2.5 rounded-lg transition-all ${skuSortMetric === 'volume' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Volume (Item)</button>
+                     <button onClick={() => setSkuSortMetric('gmv')} className={`px-5 py-2.5 rounded-lg transition-all ${skuSortMetric === 'gmv' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Sales (GMV)</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                  <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+                    <SectionTitle subtitle={skuSortMetric === 'volume' ? "Volume leaders" : "Revenue leaders"}>🏆 Top Performing SKUs</SectionTitle>
+                    <div className="space-y-4">
+                      {topPerformers.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between p-5 bg-slate-50 rounded-3xl border border-transparent hover:border-slate-200 transition-all hover:shadow-md">
+                          <div className="flex items-center gap-5">
+                            <div className="w-12 h-12 rounded-2xl bg-slate-800 text-white flex items-center justify-center font-black">#{i+1}</div>
+                            <div><p className="text-sm font-bold text-slate-800">{p.name}</p><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{p.category}</p></div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-slate-800">{skuSortMetric === 'volume' ? `${p.sales.toLocaleString('th-TH')} Item Sold` : `฿${p.gmv.toLocaleString('th-TH', { maximumFractionDigits: 0 })}`}</p>
+                            <p className="text-[10px] text-emerald-600 font-black">{p.growth > 0 ? '+' : ''}{p.growth}%</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+                    <SectionTitle subtitle="Action needed">📉 Declining SKUs</SectionTitle>
+                    <div className="space-y-4">
+                      {decliningSkus.length > 0 ? decliningSkus.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between p-5 bg-rose-50/20 rounded-3xl border border-transparent hover:border-rose-100 transition-all hover:shadow-md">
+                          <div className="flex items-center gap-5">
+                            <div className="w-12 h-12 rounded-2xl bg-rose-500 text-white flex items-center justify-center shadow-lg">
+                              <div className="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center font-black text-xs">!</div>
+                            </div>
+                            <div><p className="text-sm font-bold text-slate-800">{p.name}</p><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{p.category}</p></div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-slate-800">{skuSortMetric === 'volume' ? `${p.sales.toLocaleString('th-TH')} Item Sold` : `฿${p.gmv.toLocaleString('th-TH', { maximumFractionDigits: 0 })}`}</p>
+                            <p className="text-[10px] text-rose-600 font-black">{p.growth > 0 ? '+' : ''}{p.growth}%</p>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="flex flex-col items-center justify-center py-10 opacity-50">
+                           <Check className="w-8 h-8 text-emerald-500 mb-2" />
+                           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">No Declining SKUs</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Thailand Heatmap specifically for Line Platform */}
+              {selectedPlatform === 'Line' && (
+                <ThailandHeatmap filteredProducts={filteredProducts} />
+              )}
+
+              <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="p-10 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
+                  <SectionTitle subtitle="Deep dive catalog performance">Product Analytics</SectionTitle>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center cursor-pointer mr-2 md:mr-4 group">
+                      <div className="relative">
+                        <input type="checkbox" className="sr-only" checked={hideZeroSales} onChange={() => setHideZeroSales(!hideZeroSales)} />
+                        <div className={`block w-8 h-4.5 md:w-10 md:h-6 rounded-full transition-colors ${hideZeroSales ? 'bg-indigo-500' : 'bg-slate-300'}`}></div>
+                        <div className={`absolute left-1 top-1 bg-white w-2.5 h-2.5 md:w-4 md:h-4 rounded-full transition-transform ${hideZeroSales ? 'transform translate-x-3.5 md:translate-x-4' : ''}`}></div>
+                      </div>
+                      <span className="ml-2 md:ml-3 text-[9px] md:text-xs font-black text-slate-500 uppercase tracking-widest group-hover:text-indigo-600 transition-colors">Hide 0 Sales</span>
+                    </label>
+                    <button onClick={() => setShowCompareTable(!showCompareTable)} disabled={!hasDateFilter} className={`flex items-center text-xs font-black px-4 py-2 rounded-xl shadow-sm transition-all ${!hasDateFilter ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400' : showCompareTable ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:text-slate-700'}`} title={!hasDateFilter ? "Please select Date Range to compare" : "Toggle Period Comparison"}>
+                      Compare
+                    </button>
+                    <button onClick={() => exportToCSV(aggregatedProducts, `xBloom_${selectedPlatform}_Data`)} className="flex items-center text-sm font-bold text-indigo-600 hover:text-indigo-800 bg-white px-4 py-2 rounded-xl shadow-sm hover:shadow-md transition-all border border-transparent">
+                      <Download className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Export CSV</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[2px] border-b border-slate-100">
+                          <th className="px-10 py-5">SKU Description</th>
+                          <th className="px-6 py-5">GMV</th>
+                          <th className="px-6 py-5">Item Sold</th>
+                          {!['Line', 'TikTok', 'Lazada', 'Direct sales', 'B2B', 'Store'].includes(selectedPlatform) && (
+                            <Fragment>
+                              <th className="px-6 py-5">CR%</th>
+                              <th className="px-6 py-5">Visitors</th>
+                            </Fragment>
+                          )}
+                        </tr>
+                      </thead>
+                      {Object.keys(groupedProducts).length > 0 ? (
+                        Object.keys(groupedProducts).map((cat) => (
+                          <tbody key={cat}>
+                            <tr className="bg-slate-50/80">
+                              <td colSpan={!['Line', 'TikTok', 'Lazada', 'Direct sales', 'B2B', 'Store'].includes(selectedPlatform) ? 5 : 3} className="px-10 py-3 text-[11px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50/30 border-y border-indigo-100/50">
+                                {cat}
+                              </td>
+                            </tr>
+                            {groupedProducts[cat].map((sku, i) => (
+                              <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                <td className="px-10 py-5 align-middle">
+                                  <div className="text-sm font-bold text-slate-800 max-w-[260px] whitespace-normal break-words leading-snug line-clamp-2" title={sku.name}>{sku.name}</div>
+                                </td>
+                                <td className="px-6 py-5 align-middle">
+                                  <div className="font-bold text-sm text-slate-800">฿{sku.gmv.toLocaleString('th-TH', { maximumFractionDigits: 0 })}</div>
+                                  {showCompareTable && hasDateFilter && (
+                                    <div className="flex flex-nowrap items-center gap-1 mt-2">
+                                      <MiniCompareBadge label="LW" curr={sku.gmv} prev={sku.lw.gmv} />
+                                      <MiniCompareBadge label="LM" curr={sku.gmv} prev={sku.lm.gmv} />
+                                      <MiniCompareBadge label="LY" curr={sku.gmv} prev={sku.ly.gmv} />
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-6 py-5 align-middle">
+                                  <div className="font-bold text-sm text-slate-500">{sku.sales.toLocaleString('th-TH')}</div>
+                                  {showCompareTable && hasDateFilter && (
+                                    <div className="flex flex-nowrap items-center gap-1 mt-2">
+                                      <MiniCompareBadge label="LW" curr={sku.sales} prev={sku.lw.sales} />
+                                      <MiniCompareBadge label="LM" curr={sku.sales} prev={sku.lm.sales} />
+                                      <MiniCompareBadge label="LY" curr={sku.sales} prev={sku.ly.sales} />
+                                    </div>
+                                  )}
+                                </td>
+                                {!['Line', 'TikTok', 'Lazada', 'Direct sales', 'B2B', 'Store'].includes(selectedPlatform) && (
+                                  <Fragment>
+                                    <td className="px-6 py-5 align-middle">
+                                      <div className={`text-xs font-black px-2.5 py-1.5 rounded-xl inline-block ${sku.cr > 3 ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                        {isNaN(sku.cr) ? 0 : sku.cr}%
+                                      </div>
+                                      {showCompareTable && hasDateFilter && (
+                                        <div className="flex flex-nowrap items-center gap-1 mt-2">
+                                          <MiniCompareBadge label="LW" curr={sku.cr} prev={sku.lw.cr} isPercent={true} />
+                                          <MiniCompareBadge label="LM" curr={sku.cr} prev={sku.lm.cr} isPercent={true} />
+                                          <MiniCompareBadge label="LY" curr={sku.cr} prev={sku.ly.cr} isPercent={true} />
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="px-6 py-5 align-middle">
+                                      <div className="text-xs font-bold text-slate-500">{sku.visitors.toLocaleString('th-TH')}</div>
+                                      {showCompareTable && hasDateFilter && (
+                                        <div className="flex flex-nowrap items-center gap-1 mt-2">
+                                          <MiniCompareBadge label="LW" curr={sku.visitors} prev={sku.lw.visitors} />
+                                          <MiniCompareBadge label="LM" curr={sku.visitors} prev={sku.lm.visitors} />
+                                          <MiniCompareBadge label="LY" curr={sku.visitors} prev={sku.ly.visitors} />
+                                        </div>
+                                      )}
+                                    </td>
+                                  </Fragment>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        ))
+                      ) : (
+                        <tbody>
+                          <tr>
+                            <td colSpan={!['Line', 'TikTok', 'Lazada', 'Direct sales', 'B2B', 'Store'].includes(selectedPlatform) ? 5 : 3} className="p-20 text-center text-slate-400 font-bold">No items match current filters.</td>
+                          </tr>
+                        </tbody>
+                      )}
+                    </table>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        const normalizeCategoryOverview = (category, productName = '') => {
+          const cat = String(category || '').toLowerCase().trim();
+          const name = String(productName || '').toLowerCase().trim();
+          const str = cat + ' ' + name;
+          
+          if (str.includes('xpod') || str.includes('bean') || str.includes('sachet') || str.includes('consumable')) {
+            return 'xPod and beans';
+          }
+          
+          const isAccessory = str.includes('accessories') || str.includes('filter') || str.includes('tea brewer') || str.includes('coffee spoon') || str.includes('kinto') || str.includes('omni dripper') || str.includes('travel bag') || str.includes('inline water pressure') || str.includes('magnetic dosing cup') || str.includes('power cord') || str.includes('drip tray') || str.includes('water tank') || str.includes('dock stand') || str.includes('equipment');
+          if (isAccessory) {
+            return 'accessories';
+          }
+          
+          if (str.includes('studio') || str.includes('machine') || str.includes('เครื่องชง') || str.includes('midnight black') || str.includes('moonlight white') || str.includes('sage green') || str.includes('twilight')) {
+            return 'xBloom studio';
+          }
+          
+          return 'accessories'; 
+        };
+
+        function App() {
+          const [view, setView] = useState('overview'); 
+          const [selectedPlatform, setSelectedPlatform] = useState('Shopee');
+          const [dataSourceModalOpen, setDataSourceModalOpen] = useState(false);
+          const [isCopied, setIsCopied] = useState(false);
+          const [fetchErrors, setFetchErrors] = useState({});
+          
+          // ระบบ State ส่วนกลาง (Global Filter)
+          const [globalFilterCriteria, setGlobalFilterCriteria] = useState({ 
+            activeFilters: { date: false, category: false, campaign: false, product: false }, 
+            tempValues: { startDate: '', endDate: '', category: '', campaign: '', productName: '' } 
+          });
+
+          const [platformUrls, setPlatformUrls] = useState(() => {
+            const saved = localStorage.getItem('xbloom_platform_urls');
+            if (saved) {
+               const parsed = JSON.parse(saved);
+               return {
+                  Shopee: parsed.Shopee || DEFAULT_PLATFORM_URLS.Shopee,
+                  Lazada: parsed.Lazada || DEFAULT_PLATFORM_URLS.Lazada,
+                  Line: parsed.Line || DEFAULT_PLATFORM_URLS.Line,
+                  TikTok: parsed.TikTok || DEFAULT_PLATFORM_URLS.TikTok,
+                  'Direct sales': parsed['Direct sales'] || DEFAULT_PLATFORM_URLS['Direct sales'],
+                  'B2B': parsed['B2B'] || DEFAULT_PLATFORM_URLS['B2B'],
+                  // ล้างลิงก์เก่าของ Store ที่ค้างในระบบ เพื่อป้องกัน Error การกรองข้อมูลผิดพลาด
+                  'Store': (parsed['Store'] === DEFAULT_PLATFORM_URLS['Direct sales']) ? DEFAULT_PLATFORM_URLS['Store'] : (parsed['Store'] || DEFAULT_PLATFORM_URLS['Store'])
+               };
+            }
+            return DEFAULT_PLATFORM_URLS;
+          });
+
+          const [salesTargets, setSalesTargets] = useState(() => {
+            const saved = localStorage.getItem('xbloom_sales_targets_dict');
+            return saved ? JSON.parse(saved) : { '2026-04': 4000000 };
+          });
+
+          useEffect(() => { localStorage.setItem('xbloom_platform_urls', JSON.stringify(platformUrls)); }, [platformUrls]);
+          useEffect(() => { localStorage.setItem('xbloom_sales_targets_dict', JSON.stringify(salesTargets)); }, [salesTargets]);
+
+          const [globalData, setGlobalData] = useState([]);
+          const [isGlobalLoading, setIsGlobalLoading] = useState(true);
+
+          useEffect(() => {
+            const fetchAllPlatforms = async () => {
+               setIsGlobalLoading(true);
+               setFetchErrors({});
+               let allMergedData = [];
+               let errors = {};
+               for (const [platform, url] of Object.entries(platformUrls)) {
+                  if (!url) continue;
+                  try {
+                     const res = await fetch(url);
+                     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+                     const text = await res.text();
+                     
+                     // ป้องกัน Google Sheets คืนค่าเป็นหน้าเว็บ HTML (ต้องเป็น CSV เท่านั้น)
+                     if (text.trim().toLowerCase().startsWith('<!doctype html>')) {
+                         throw new Error('Google Sheets is returning a web page instead of CSV. Please use "Publish to web" and select "CSV" format.');
+                     }
+                     
+                     // ตรวจสอบว่าไฟล์ CSV เป็นไฟล์แยกเฉพาะ (Dedicated) หรือไม่
+                     let isDedicated = false;
+                     if (platform === 'Store' || platform === 'B2B') {
+                         isDedicated = url !== platformUrls['Direct sales'];
+                     }
+
+                     if (platform === 'Store') {
+                         const rows2D = parseCSV2D(text);
+                         const formatted = formatStoreData(rows2D, platform);
+                         allMergedData = [...allMergedData, ...formatted];
+                     } else if (platform === 'Direct sales' || platform === 'B2B') {
+                         const rows2D = parseCSV2D(text);
+                         const formatted = formatDirectSalesData(rows2D, platform, isDedicated);
+                         
+                         // ถ้าระบบหาข้อมูลแบบตารางขวางไม่เจอ ให้สลับไปลองอ่านตารางแบบ Shopee อัตโนมัติ (Fallback)
+                         if (isDedicated && formatted.length === 0) {
+                             const parsed = parseCSV(text);
+                             if (parsed.length > 0) {
+                                 const fallbackFormatted = formatRawData(parsed, platform);
+                                 allMergedData = [...allMergedData, ...fallbackFormatted];
+                                 continue;
+                             }
+                         }
+                         allMergedData = [...allMergedData, ...formatted];
+                     } else {
+                         const parsed = parseCSV(text);
+                         const formatted = formatRawData(parsed, platform);
+                         allMergedData = [...allMergedData, ...formatted];
+                     }
+                  } catch (e) { 
+                      console.error(`Failed to fetch ${platform}:`, e); 
+                      errors[platform] = e.message;
+                  }
+               }
+               setGlobalData(allMergedData);
+               setFetchErrors(errors);
+               setIsGlobalLoading(false);
+            };
+            fetchAllPlatforms();
+          }, [platformUrls]);
+
+          const activeTargetMonth = useMemo(() => {
+             const { activeFilters, tempValues } = globalFilterCriteria;
+             if (activeFilters?.date && tempValues?.startDate) return tempValues.startDate.substring(0, 7); 
+             const now = new Date(); const y = now.getFullYear(); const m = String(now.getMonth() + 1).padStart(2, '0');
+             return `${y}-${m}`;
+          }, [globalFilterCriteria]);
+
+          const currentTargetGmv = salesTargets[activeTargetMonth] || 0;
+
+          const overviewAvailableCategories = useMemo(() => {
+             const categories = new Set(globalData.map(item => normalizeCategoryOverview(item.category, item.name))); return Array.from(categories).filter(Boolean).sort();
+          }, [globalData]);
+
+          const overviewAvailableCampaigns = useMemo(() => {
+             const campaigns = new Set(globalData.map(item => item.campaign)); return Array.from(campaigns).filter(Boolean).sort();
+          }, [globalData]);
+
+          const overviewKpis = useMemo(() => {
+            const { activeFilters, tempValues } = globalFilterCriteria;
+            const baseData = globalData.filter(p => {
+              let match = true;
+              if (activeFilters?.category && tempValues?.category) { match = match && normalizeCategoryOverview(p.category, p.name) === tempValues.category; }
+              if (activeFilters?.campaign && tempValues?.campaign) { match = match && p.campaign === tempValues.campaign; }
+              if (activeFilters?.product && tempValues?.productName) { match = match && p.name.toLowerCase().includes(tempValues.productName.toLowerCase()); }
+              return match;
+            });
+
+            const calc = (dataToCalc) => {
+              let gmv = 0, sales = 0, visitors = 0, views = 0;
+              dataToCalc.forEach(p => { gmv += p.gmv || 0; sales += p.sales || 0; visitors += p.visitors || 0; views += p.views || 0; });
+              const aov = sales > 0 ? Math.round(gmv / sales) : 0;
+              const cr = visitors > 0 ? Number(((sales / visitors) * 100).toFixed(2)) : 0;
+              return { gmv, sales, aov, visitors, views, cr };
+            };
+
+            if (!activeFilters?.date || !tempValues.startDate || !tempValues.endDate) return { current: calc(baseData), lw: calc([]), lm: calc([]), ly: calc([]) };
+
+            const startCurr = new Date(`${tempValues.startDate}T00:00:00`); const endCurr = new Date(`${tempValues.endDate}T23:59:59`);
+            const startLW = shiftDateLW(startCurr); startLW.setHours(0,0,0,0); const endLW = shiftDateLW(endCurr); endLW.setHours(23,59,59,999);
+            const startLM = shiftDateLM(startCurr); startLM.setHours(0,0,0,0); const endLM = shiftDateLM(endCurr); endLM.setHours(23,59,59,999);
+            const startLY = shiftDateLY(startCurr); startLY.setHours(0,0,0,0); const endLY = shiftDateLY(endCurr); endLY.setHours(23,59,59,999);
+
+            const currentData = [], lwData = [], lmData = [], lyData = [];
+            baseData.forEach(p => {
+               if(!p.date) return; const d = new Date(`${p.date}T12:00:00`);
+               if (d >= startCurr && d <= endCurr) currentData.push(p);
+               if (d >= startLW && d <= endLW) lwData.push(p);
+               if (d >= startLM && d <= endLM) lmData.push(p);
+               if (d >= startLY && d <= endLY) lyData.push(p);
+            });
+            return { current: calc(currentData), lw: calc(lwData), lm: calc(lmData), ly: calc(lyData) };
+          }, [globalData, globalFilterCriteria]);
+
+          const overviewCategoryData = useMemo(() => {
+            const { activeFilters, tempValues } = globalFilterCriteria;
+            let startCurr, endCurr;
+            if (activeFilters?.date && tempValues?.startDate && tempValues?.endDate) { startCurr = new Date(`${tempValues.startDate}T00:00:00`); endCurr = new Date(`${tempValues.endDate}T23:59:59`); }
+            const grouped = {};
+            globalData.forEach(p => {
+              let match = true;
+              if (startCurr && endCurr) { if(!p.date) match = false; else { const d = new Date(`${p.date}T12:00:00`); if (d < startCurr || d > endCurr) match = false; } }
+              if (activeFilters?.category && tempValues?.category) { match = match && normalizeCategoryOverview(p.category, p.name) === tempValues.category; }
+              if (activeFilters?.campaign && tempValues?.campaign) { match = match && p.campaign === tempValues.campaign; }
+              if (activeFilters?.product && tempValues?.productName) { match = match && p.name.toLowerCase().includes(tempValues.productName.toLowerCase()); }
+              
+              if (match) {
+                 const catName = normalizeCategoryOverview(p.category, p.name);
+                 if (!grouped[catName]) grouped[catName] = { gmv: 0, units: 0 };
+                 grouped[catName].gmv += (p.gmv || 0); grouped[catName].units += (p.sales || 0);
+               }
+            });
+            const totalGmv = Object.values(grouped).reduce((acc, curr) => acc + curr.gmv, 0);
+            return Object.entries(grouped).map(([name, data], idx) => ({
+              name, gmv: data.gmv, units: data.units, value: data.gmv, 
+              percentage: totalGmv > 0 ? Math.round((data.gmv / totalGmv) * 100) : 0, color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length]
+            })).sort((a,b) => b.gmv - a.gmv);
+          }, [globalData, globalFilterCriteria]);
+
+          const overviewChannelData = useMemo(() => {
+            const { activeFilters, tempValues } = globalFilterCriteria;
+            let startCurr, endCurr;
+            if (activeFilters?.date && tempValues?.startDate && tempValues?.endDate) { startCurr = new Date(`${tempValues.startDate}T00:00:00`); endCurr = new Date(`${tempValues.endDate}T23:59:59`); }
+            const grouped = {};
+            globalData.forEach(p => {
+              let match = true;
+              if (startCurr && endCurr) { if(!p.date) match = false; else { const d = new Date(`${p.date}T12:00:00`); if (d < startCurr || d > endCurr) match = false; } }
+              if (activeFilters?.category && tempValues?.category) { match = match && normalizeCategoryOverview(p.category, p.name) === tempValues.category; }
+              if (activeFilters?.campaign && tempValues?.campaign) { match = match && p.campaign === tempValues.campaign; }
+              if (activeFilters?.product && tempValues?.productName) { match = match && p.name.toLowerCase().includes(tempValues.productName.toLowerCase()); }
+              
+              if (match) {
+                 if (!grouped[p.platform]) grouped[p.platform] = { gmv: 0, units: 0 };
+                 grouped[p.platform].gmv += (p.gmv || 0);
+                 grouped[p.platform].units += (p.sales || 0);
+              }
+            });
+            const totalGmv = Object.values(grouped).reduce((acc, curr) => acc + curr.gmv, 0);
+            return Object.entries(grouped).map(([name, data]) => ({
+              name, gmv: data.gmv, units: data.units, percentage: totalGmv > 0 ? Math.round((data.gmv / totalGmv) * 100) : 0, color: PLATFORM_COLORS[name] || '#94a3b8'
+            })).sort((a,b) => b.gmv - a.gmv);
+          }, [globalData, globalFilterCriteria]);
+
+          const overviewTrendData = useMemo(() => {
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const grouped = {};
+            months.forEach(m => grouped[m] = { month: m, gmv2025: 0, gmv2026: 0 });
+            globalData.forEach(p => {
+                if(!p.date) return; const d = new Date(`${p.date}T12:00:00`);
+                const m = months[d.getMonth()]; const y = d.getFullYear();
+                if (y === 2025) grouped[m].gmv2025 += (p.gmv || 0); if (y === 2026) grouped[m].gmv2026 += (p.gmv || 0);
+            });
+            return Object.values(grouped);
+          }, [globalData]);
+
+          const handleCopySummary = () => {
+            const { activeFilters, tempValues } = globalFilterCriteria;
+            let filteredData = globalData;
+            let dateHeader = "ช่วงเวลา: All Time";
+
+            if (activeFilters?.date && tempValues?.startDate && tempValues?.endDate) {
+                const startCurr = new Date(`${tempValues.startDate}T00:00:00`);
+                const endCurr = new Date(`${tempValues.endDate}T23:59:59`);
+                dateHeader = `ช่วงเวลา: ${tempValues.startDate} ถึง ${tempValues.endDate}`;
+                
+                filteredData = globalData.filter(p => {
+                    if (!p.date) return false;
+                    const d = new Date(`${p.date}T12:00:00`);
+                    return d >= startCurr && d <= endCurr;
+                });
+            }
+
+            const platforms = ['Shopee', 'Lazada', 'Line', 'TikTok', 'Direct sales', 'B2B', 'Store'];
+            let summaryText = `${dateHeader}\n\n`;
+            
+            let totalStudio = 0;
+            let totalConsumable = 0;
+
+            platforms.forEach(plat => {
+                const platData = filteredData.filter(p => p.platform.toLowerCase() === plat.toLowerCase());
+                let studioGmv = 0;
+                let consumableGmv = 0;
+
+                platData.forEach(p => {
+                    const isStudio = checkIsStudio(p.category, p.name);
+                    if (isStudio) {
+                        studioGmv += (p.gmv || 0);
+                    } else {
+                        consumableGmv += (p.gmv || 0);
+                    }
+                });
+
+                const totalPlat = studioGmv + consumableGmv;
+                
+                totalStudio += studioGmv;
+                totalConsumable += consumableGmv;
+
+                summaryText += `${plat}\n`;
+                summaryText += `xBloom studio ยอดขาย ${studioGmv.toLocaleString('th-TH', {maximumFractionDigits:0})}\n`;
+                summaryText += `xPod and beans and accessories ยอดขาย ${consumableGmv.toLocaleString('th-TH', {maximumFractionDigits:0})}\n`;
+                summaryText += `ยอดขายรวม ${plat} ${totalPlat.toLocaleString('th-TH', {maximumFractionDigits:0})}\n\n`;
+            });
+
+            summaryText += `ยอดขายรวมทุก platform\n`;
+            summaryText += `xBloom studio ยอดขาย ${totalStudio.toLocaleString('th-TH', {maximumFractionDigits:0})}\n`;
+            summaryText += `xPod and beans and accessories ยอดขาย ${totalConsumable.toLocaleString('th-TH', {maximumFractionDigits:0})}\n`;
+            summaryText += `ยอดขายรวม platform ${(totalStudio + totalConsumable).toLocaleString('th-TH', {maximumFractionDigits:0})}`;
+
+            const textArea = document.createElement("textarea");
+            textArea.value = summaryText;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                setIsCopied(true);
+                setTimeout(() => setIsCopied(false), 2500); 
+            } catch (err) {
+                console.error('Failed to copy', err);
+            }
+            document.body.removeChild(textArea);
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-10">
+              <header className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-start xl:items-center mb-12 gap-6 xl:gap-4">
+                <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-8 min-w-0 w-full xl:w-auto">
+                  <div className="shrink-0"><h1 className="text-4xl font-bold tracking-tighter text-slate-900">xBloom</h1><p className="text-slate-400 text-xs mt-2 flex items-center font-bold uppercase tracking-[4px]"><Calendar className="w-4 h-4 mr-2" /> E-commerce Dashboard</p></div>
+                  <nav className="flex flex-wrap items-center gap-1 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full lg:w-auto overflow-x-auto">
+                    <button onClick={() => setView('overview')} className={`flex items-center px-4 py-3 md:px-5 md:py-3 rounded-xl text-[11px] md:text-xs font-black uppercase tracking-widest transition-all shrink-0 ${view === 'overview' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-50'}`}><Home className="w-4 h-4 mr-2" /> Overview</button>
+                    {['Shopee', 'Lazada', 'Line', 'TikTok', 'Direct sales', 'B2B', 'Store'].map((p) => (<button key={p} onClick={() => { setSelectedPlatform(p); setView('platform'); }} className={`flex items-center px-4 py-3 md:px-5 md:py-3 rounded-xl text-[11px] md:text-xs font-black uppercase tracking-widest transition-all shrink-0 ${view === 'platform' && selectedPlatform === p ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-50'}`}><div className="w-2.5 h-2.5 rounded-full mr-2 shadow-sm" style={{ backgroundColor: PLATFORM_COLORS[p] }} />{p}</button>))}
+                  </nav>
+                </div>
+                <div className="flex gap-3 w-full xl:w-auto shrink-0">
+                  {view === 'overview' && (
+                    <button onClick={handleCopySummary} className={`opacity-0 hover:opacity-100 focus:opacity-100 flex items-center justify-center px-5 py-3 border rounded-xl text-[11px] md:text-xs font-black uppercase tracking-widest shadow-sm transition-all duration-300 ${isCopied ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-indigo-600 hover:bg-slate-50'}`} title="Copy Summary">
+                      {isCopied ? <Check className="w-4 h-4 md:mr-2" /> : <Copy className="w-4 h-4 md:mr-2" />} 
+                      <span className="hidden md:inline">{isCopied ? 'Copied!' : 'Copy Summary'}</span>
+                    </button>
+                  )}
+                  <button onClick={() => setDataSourceModalOpen(true)} className="flex items-center justify-center px-5 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl text-[11px] md:text-xs font-black uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all"><Database className="w-4 h-4 mr-2" /> <span className="hidden md:inline">Data Sync</span></button>
+                  <button onClick={() => exportToCSV(globalData, 'xBloom_All_Data')} className="flex items-center justify-center px-5 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl text-[11px] md:text-xs font-black uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all"><Download className="w-4 h-4 mr-2" /> <span>Export All</span></button>
+                </div>
+              </header>
+
+              <main className="max-w-7xl mx-auto">
+                {Object.keys(fetchErrors).length > 0 && (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-2xl mb-8 flex items-start gap-3 shadow-sm">
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-500" />
+                    <div>
+                        <h4 className="font-bold text-sm text-rose-800">เกิดข้อผิดพลาดในการซิงค์ข้อมูล (Data Sync Failed)</h4>
+                        <ul className="text-xs mt-1 space-y-1 text-rose-600">
+                            {Object.entries(fetchErrors).map(([plat, err]) => <li key={plat}><b className="uppercase tracking-wider">{plat}:</b> {err}</li>)}
+                        </ul>
+                        <button onClick={() => setDataSourceModalOpen(true)} className="mt-3 text-xs font-bold bg-white text-rose-600 px-3 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-100 transition-colors shadow-sm">Check Data Settings</button>
+                    </div>
+                  </div>
+                )}
+
+                {view === 'overview' ? (
+                  <div className="space-y-12 animate-in fade-in duration-1000">
+                    <FilterBar onApply={(f) => setGlobalFilterCriteria(f)} selectedPlatform="All" availableCategories={overviewAvailableCategories} availableCampaigns={overviewAvailableCampaigns} currentFilters={globalFilterCriteria} />
+                    
+                    {isGlobalLoading ? (
+                       <div className="py-20 text-center flex flex-col items-center">
+                          <RefreshCw className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
+                          <p className="text-slate-500 font-bold uppercase tracking-widest">Aggregating Data...</p>
+                       </div>
+                    ) : (
+                      <Fragment>
+                        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                          <StatCard title="Total GMV" value={overviewKpis.current.gmv} prefix="฿" prevLy={overviewKpis.ly.gmv} prevLw={overviewKpis.lw.gmv} prevLm={overviewKpis.lm.gmv} />
+                          <StatCard title="Total Items Sold" value={overviewKpis.current.sales} prevLy={overviewKpis.ly.sales} prevLw={overviewKpis.lw.sales} prevLm={overviewKpis.lm.sales} />
+                          <StatCard title="AOV" value={overviewKpis.current.aov} prefix="฿" prevLy={overviewKpis.ly.aov} prevLw={overviewKpis.lw.aov} prevLm={overviewKpis.lm.aov} />
+                          <StatCard title="CR%" value={overviewKpis.current.cr} suffix="%" prevLy={overviewKpis.ly.cr} prevLw={overviewKpis.lw.cr} prevLm={overviewKpis.lm.cr} />
+                          <StatCard title="Total Page Views" value={overviewKpis.current.views} prevLy={overviewKpis.ly.views} prevLw={overviewKpis.lw.views} prevLm={overviewKpis.lm.views} />
+                          <StatCard title="Total Visitors" value={overviewKpis.current.visitors} prevLy={overviewKpis.ly.visitors} prevLw={overviewKpis.lw.visitors} prevLm={overviewKpis.lm.visitors} />
+                        </section>
+                        
+                        <TargetAchievementCard actualGmv={overviewKpis.current.gmv} targetGmv={currentTargetGmv} activeMonth={activeTargetMonth} />
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex flex-col h-full">
+                            <SectionTitle subtitle="Revenue by Category (All Platforms)">Category Share</SectionTitle>
+                            <div className="h-[260px] relative mb-4">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart><Pie data={overviewCategoryData} innerRadius={80} outerRadius={110} paddingAngle={5} dataKey="value" stroke="none" labelLine={false} label={renderCustomizedPieLabel}>{overviewCategoryData.map((c, i) => <Cell key={i} fill={c.color} />)}</Pie><Tooltip content={CustomCategoryTooltip} cursor={{fill: 'transparent'}} /></PieChart>
+                              </ResponsiveContainer>
+                            </div>
+                            <PieChartLegend data={overviewCategoryData} />
+                          </div>
+                          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex flex-col h-full">
+                            <SectionTitle subtitle="GMV Contribution by Platform">Channel Contribution</SectionTitle>
+                            <div className="h-[260px] relative mb-4">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart><Pie data={overviewChannelData} innerRadius={80} outerRadius={110} paddingAngle={5} dataKey="gmv" stroke="none" labelLine={false} label={renderCustomizedPieLabel}>{overviewChannelData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip content={CustomCategoryTooltip} cursor={{fill: 'transparent'}} /></PieChart>
+                              </ResponsiveContainer>
+                            </div>
+                            <PieChartLegend data={overviewChannelData} />
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm">
+                          <div className="flex justify-between items-center mb-10"><SectionTitle subtitle="Aggregated monthly comparison (All Platforms)">GMV Trend (2026 vs 2025)</SectionTitle></div>
+                          <div className="h-[350px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={overviewTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                <defs><linearGradient id="overviewGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4f46e5" stopOpacity={0.2}/><stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/></linearGradient></defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: '600'}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11}} tickFormatter={(v) => `฿${(v/1000).toLocaleString()}k`} />
+                                <Tooltip content={<CustomTrendTooltip />} />
+                                <Area type="monotone" dataKey="gmv2025" stroke="#cbd5e1" strokeWidth={2} strokeDasharray="5 5" fill="transparent" name="2025" />
+                                <Area type="monotone" dataKey="gmv2026" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#overviewGradient)" name="2026" />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </Fragment>
+                    )}
+                  </div>
+                ) : (
+                  <PlatformDetailView selectedPlatform={selectedPlatform} onBack={() => setView('overview')} platformData={globalData.filter(d => d.platform === selectedPlatform)} isGlobalLoading={isGlobalLoading} filterCriteria={globalFilterCriteria} setFilterCriteria={setGlobalFilterCriteria} fetchErrors={fetchErrors} />
+                )}
+                <DataSourceModal isOpen={dataSourceModalOpen} onClose={() => setDataSourceModalOpen(false)} urls={platformUrls} onSave={setPlatformUrls} targets={salesTargets} onSaveTargets={setSalesTargets} />
+                <footer className="flex flex-col md:flex-row justify-between items-center text-[10px] text-slate-400 py-16 border-t border-slate-100 mt-20 gap-6 uppercase font-black tracking-[4px] text-center"><div>E-commerce Intelligence | Central API Sync</div><p>© 2026 xBloom Coffee Tech Global.</p></footer>
+              </main>
+            </div>
+          );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

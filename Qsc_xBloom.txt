@@ -1,0 +1,1858 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>xBloom QSC Audit & Performance System</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter & Prompt -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        qsc: {
+                            blue: '#1e40af',
+                            quality: '#2563eb',
+                            service: '#059669',
+                            clean: '#d97706',
+                            danger: '#dc2626'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { 
+            font-family: 'Prompt', 'Inter', sans-serif;
+            word-break: keep-all; 
+            overflow-wrap: break-word;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tab-active {
+            border-bottom: 3px solid #2563eb;
+            color: #2563eb;
+            font-weight: 600;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col pb-20 sm:pb-6">
+
+    <!-- Login Screen Modal Overlay -->
+    <div id="loginModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-6 relative border border-slate-100">
+            <div class="text-center space-y-2">
+                <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-500/30 mx-auto mb-3">
+                    <i class="fa-solid fa-square-check"></i>
+                </div>
+                <h2 class="text-xl sm:text-2xl font-bold text-slate-900">xBloom QSC System</h2>
+                <p class="text-xs sm:text-sm text-slate-500">กรุณาเข้าสู่ระบบเพื่อดำเนินการประเมินและดูรายงาน</p>
+            </div>
+
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+                <div id="loginErrorMsg" class="hidden p-3 bg-rose-50 border border-rose-200 text-rose-600 text-xs rounded-xl font-medium flex items-center gap-2">
+                    <i class="fa-solid fa-triangle-exclamation text-sm"></i>
+                    <span id="loginErrorText">ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</span>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">ชื่อผู้ใช้งาน (Username) *</label>
+                    <div class="relative">
+                        <input type="text" id="loginUsername" required placeholder="ระบุ Username" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white pl-10">
+                        <i class="fa-solid fa-user absolute left-3.5 top-3.5 text-slate-400 text-xs"></i>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">รหัสผ่าน (Password) *</label>
+                    <div class="relative">
+                        <input type="password" id="loginPassword" required placeholder="ระบุ Password" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white pl-10">
+                        <i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-slate-400 text-xs"></i>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-500/25 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket"></i>
+                    <span>เข้าสู่ระบบ</span>
+                </button>
+            </form>
+
+            <!-- Default Login Info Hint -->
+            <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-[11px] text-slate-500 space-y-1">
+                <p class="font-bold text-slate-700 flex items-center gap-1">
+                    <i class="fa-solid fa-key text-blue-600"></i> บัญชีทดสอบเริ่มต้น:
+                </p>
+                <div class="flex justify-between">
+                    <span>Admin: <strong class="text-slate-800">admin</strong> / <strong class="text-slate-800">xbloom123</strong></span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Auditor: <strong class="text-slate-800">auditor</strong> / <strong class="text-slate-800">xbloom123</strong></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Header Navigation -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center gap-2">
+                <!-- Brand Logo & Title -->
+                <div class="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+                    <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex-shrink-0 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                        <i class="fa-solid fa-square-check text-lg sm:text-xl"></i>
+                    </div>
+                    <div class="truncate">
+                        <h1 class="text-sm sm:text-lg font-bold text-slate-900 leading-tight truncate">xBloom QSC Audit System</h1>
+                        <p class="text-[10px] sm:text-xs text-slate-500 truncate hidden xs:block">ระบบประเมิน Quality, Service & Cleanliness</p>
+                    </div>
+                </div>
+
+                <!-- Global Controls (Branch Select & User Profile) -->
+                <div class="flex items-center space-x-2 flex-shrink-0">
+                    <div class="relative">
+                        <div class="bg-slate-100 border border-slate-200 text-slate-700 text-xs sm:text-sm rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 font-semibold flex items-center space-x-1.5">
+                            <i class="fa-solid fa-location-dot text-blue-600 text-xs"></i>
+                            <span class="whitespace-nowrap">Central World</span>
+                            <span class="text-[9px] sm:text-[10px] bg-slate-200 text-slate-600 px-1 py-0.5 rounded hidden md:inline-flex items-center gap-1">
+                                <i class="fa-solid fa-lock text-[8px]"></i> ล็อคสาขา
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- User Account Badge / Logout -->
+                    <div id="userHeaderBadge" class="hidden items-center space-x-2 bg-slate-50 border border-slate-200 p-1 pl-2.5 rounded-xl">
+                        <div class="text-left hidden sm:block">
+                            <p id="headerUserName" class="text-xs font-bold text-slate-800 leading-tight truncate max-w-[120px]">ผู้ใช้งาน</p>
+                            <p id="headerUserRole" class="text-[9px] text-slate-500 leading-none">Auditor</p>
+                        </div>
+                        <button onclick="handleLogout()" title="ออกจากระบบ" class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition text-xs font-bold">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+
+                    <button onclick="switchTab('audit')" class="hidden md:flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm transition">
+                        <i class="fa-solid fa-plus text-xs"></i>
+                        <span>ทำแบบประเมินสัปดาห์นี้</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="flex space-x-4 sm:space-x-8 overflow-x-auto no-scrollbar text-xs sm:text-sm font-medium border-t border-slate-100 sm:border-t-0">
+                <button id="tab-dashboard-btn" onclick="switchTab('dashboard')" class="tab-active py-2.5 sm:py-3 px-1 border-b-2 font-medium flex items-center space-x-1.5 whitespace-nowrap flex-shrink-0">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>ภาพรวม (Dashboard)</span>
+                </button>
+                <button id="tab-audit-btn" onclick="switchTab('audit')" class="text-slate-500 hover:text-slate-700 py-2.5 sm:py-3 px-1 border-b-2 border-transparent font-medium flex items-center space-x-1.5 whitespace-nowrap flex-shrink-0">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <span>ทำแบบประเมิน</span>
+                </button>
+                <button id="tab-history-btn" onclick="switchTab('history')" class="text-slate-500 hover:text-slate-700 py-2.5 sm:py-3 px-1 border-b-2 border-transparent font-medium flex items-center space-x-1.5 whitespace-nowrap flex-shrink-0">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    <span>ประวัติรายงาน</span>
+                </button>
+                <button id="tab-settings-btn" onclick="switchTab('settings')" class="text-slate-500 hover:text-slate-700 py-2.5 sm:py-3 px-1 border-b-2 border-transparent font-medium flex items-center space-x-1.5 whitespace-nowrap flex-shrink-0">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>จัดการเกณฑ์ & ผู้ใช้</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+
+        <!-- TAB 1: DASHBOARD OVERVIEW -->
+        <div id="tab-dashboard" class="space-y-4 sm:space-y-6">
+            
+            <!-- Filter Header -->
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm gap-3">
+                <div class="min-w-0 w-full sm:w-auto">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                            สรุปผลการประเมิน QSC รายสัปดาห์
+                        </h2>
+                        <span id="currentBranchBadge" class="text-[11px] bg-blue-100 text-blue-700 font-semibold px-2 py-0.5 rounded-full whitespace-nowrap">
+                            สาขา เซ็นทรัลเวิลด์ (Central World)
+                        </span>
+                    </div>
+                    <p id="lastUpdatedText" class="text-xs text-slate-500 mt-1">ยังไม่มีข้อมูลการประเมินที่บันทึกไว้ในระบบ</p>
+                </div>
+
+                <div class="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                    <label for="weekFilter" class="text-xs font-semibold text-slate-600 whitespace-nowrap">เลือกช่วงเวลา:</label>
+                    <select id="weekFilter" onchange="updateDashboardData()" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 font-medium max-w-[240px] sm:max-w-none">
+                        <option value="CURRENT" selected>รอบประเมินปัจจุบัน</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Score Cards Grid -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                
+                <!-- Overall QSC Score -->
+                <div class="col-span-2 sm:col-span-1 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
+                    <div class="absolute -right-3 -bottom-3 w-16 h-16 sm:w-20 sm:h-20 bg-blue-50 rounded-full flex items-center justify-center opacity-70 pointer-events-none">
+                        <i class="fa-solid fa-award text-2xl sm:text-3xl text-blue-500"></i>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center text-xs font-semibold text-slate-500 mb-1 gap-1">
+                            <span class="truncate">คะแนนรวม QSC Overall</span>
+                            <span id="overallGrade" class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold whitespace-nowrap">-</span>
+                        </div>
+                        <div class="flex items-baseline space-x-2 mt-1">
+                            <span id="kpiOverall" class="text-2xl sm:text-3xl font-extrabold text-slate-900">-</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 mt-3">
+                        <div id="kpiOverallBar" class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Quality Score -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
+                    <div class="absolute -right-3 -bottom-3 w-16 h-16 sm:w-20 sm:h-20 bg-blue-50 rounded-full flex items-center justify-center opacity-70 pointer-events-none">
+                        <i class="fa-solid fa-utensils text-2xl sm:text-3xl text-blue-500"></i>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center text-[11px] sm:text-xs font-semibold text-slate-500 mb-1">
+                            <span class="truncate">Q - Quality</span>
+                            <span class="text-slate-400 text-[10px] hidden sm:inline">เป้า 90%</span>
+                        </div>
+                        <div class="flex items-baseline space-x-1.5 mt-1">
+                            <span id="kpiQuality" class="text-2xl sm:text-3xl font-extrabold text-blue-600">-</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 mt-3">
+                        <div id="kpiQualityBar" class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Service Score -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
+                    <div class="absolute -right-3 -bottom-3 w-16 h-16 sm:w-20 sm:h-20 bg-emerald-50 rounded-full flex items-center justify-center opacity-70 pointer-events-none">
+                        <i class="fa-solid fa-hand-holding-heart text-2xl sm:text-3xl text-emerald-500"></i>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center text-[11px] sm:text-xs font-semibold text-slate-500 mb-1">
+                            <span class="truncate">S - Service</span>
+                            <span class="text-slate-400 text-[10px] hidden sm:inline">เป้า 90%</span>
+                        </div>
+                        <div class="flex items-baseline space-x-1.5 mt-1">
+                            <span id="kpiService" class="text-2xl sm:text-3xl font-extrabold text-emerald-600">-</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 mt-3">
+                        <div id="kpiServiceBar" class="bg-emerald-600 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Cleanliness Score -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
+                    <div class="absolute -right-3 -bottom-3 w-16 h-16 sm:w-20 sm:h-20 bg-amber-50 rounded-full flex items-center justify-center opacity-70 pointer-events-none">
+                        <i class="fa-solid fa-sparkles text-2xl sm:text-3xl text-amber-500"></i>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center text-[11px] sm:text-xs font-semibold text-slate-500 mb-1">
+                            <span class="truncate">C - Cleanliness</span>
+                            <span class="text-slate-400 text-[10px] hidden sm:inline">เป้า 90%</span>
+                        </div>
+                        <div class="flex items-baseline space-x-1.5 mt-1">
+                            <span id="kpiClean" class="text-2xl sm:text-3xl font-extrabold text-amber-600">-</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 mt-3">
+                        <div id="kpiCleanBar" class="bg-amber-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                <!-- Weekly Trend Line Chart -->
+                <div class="lg:col-span-2 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2">
+                        <div>
+                            <h3 class="font-bold text-slate-900 text-sm sm:text-base">แนวโน้มคะแนนประเมินรายสัปดาห์</h3>
+                            <p class="text-xs text-slate-500">เปรียบเทียบคะแนน Q, S, C แต่ละสัปดาห์</p>
+                        </div>
+                        <div class="flex space-x-3 text-[11px] sm:text-xs">
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span> Quality</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> Service</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Cleanliness</span>
+                        </div>
+                    </div>
+                    <div class="h-56 sm:h-72 relative">
+                        <canvas id="weeklyTrendChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Radar / Category Breakdown Chart -->
+                <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-sm sm:text-base mb-0.5">สมดุลมาตรฐานสถานี (QSC Balance)</h3>
+                        <p class="text-xs text-slate-500 mb-3">แสดงสัดส่วนคะแนนตามสถานีการทำงาน</p>
+                    </div>
+                    <div class="h-52 sm:h-60 relative flex items-center justify-center">
+                        <canvas id="categoryRadarChart"></canvas>
+                    </div>
+                    <div id="radarStatusText" class="mt-3 pt-2.5 border-t border-slate-100 text-xs text-slate-500 text-center">
+                        เริ่มบันทึกประเมินเพื่อดูความสมดุลสถานี
+                    </div>
+                </div>
+            </div>
+
+            <!-- Critical Issues & Action Items -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                            <span>หัวข้อที่ไม่ผ่านเกณฑ์ / ต้องปรับปรุงด่วน (Action Needed)</span>
+                        </h3>
+                        <p class="text-xs text-slate-500">รายการที่ไม่ผ่านเกณฑ์จากการตรวจประเมิน</p>
+                    </div>
+                    <span id="actionItemsCountBadge" class="bg-slate-100 text-slate-600 font-bold text-xs px-2.5 py-1 rounded-full whitespace-nowrap">
+                        ไม่มีข้อตกค้าง
+                    </span>
+                </div>
+                
+                <div id="actionItemsContainer" class="divide-y divide-slate-100">
+                    <div class="p-8 text-center text-xs text-slate-400">
+                        <i class="fa-solid fa-circle-check text-2xl text-emerald-500 mb-2 block"></i>
+                        ยังไม่มีหัวข้อบกพร่อง หรือยังไม่มีการทำประเมินในระบบ
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- TAB 2: AUDIT ASSESSMENT FORM -->
+        <div id="tab-audit" class="hidden space-y-4 sm:space-y-6">
+            
+            <form id="auditForm" onsubmit="handleAuditSubmit(event)">
+                <!-- Form Top Header Card -->
+                <div class="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3">
+                        <div>
+                            <h2 class="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+                                <i class="fa-solid fa-clipboard-list text-blue-600"></i>
+                                <span>แบบบันทึกการประเมิน QSC ประจำสัปดาห์</span>
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-0.5">ตรวจเช็กสถานีปฏิบัติงานหน้าร้าน</p>
+                        </div>
+                        
+                        <!-- Desktop Live Score Summary Bar -->
+                        <div class="hidden sm:flex bg-slate-900 text-white px-4 py-2.5 rounded-xl items-center space-x-4 shadow-md flex-shrink-0">
+                            <div>
+                                <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">คะแนนรวมสด</p>
+                                <p id="liveTotalScore" class="text-2xl font-black text-emerald-400">100%</p>
+                            </div>
+                            <div class="h-8 w-px bg-slate-700"></div>
+                            <div class="text-xs space-y-0.5 text-slate-300">
+                                <div>Q: <span id="liveQScore" class="font-bold text-white">100%</span></div>
+                                <div>S: <span id="liveSScore" class="font-bold text-white">100%</span></div>
+                                <div>C: <span id="liveCScore" class="font-bold text-white">100%</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-medium text-slate-700">
+                        <div>
+                            <label class="block mb-1 text-slate-500">สาขาที่เข้าตรวจ *</label>
+                            <div class="relative">
+                                <input type="text" id="formBranch" value="สาขา เซ็นทรัลเวิลด์ (Central World)" readonly class="w-full bg-slate-100 border border-slate-300 text-slate-800 font-bold rounded-lg p-2.5 cursor-not-allowed pr-8 text-xs">
+                                <i class="fa-solid fa-lock absolute right-3 top-3 text-slate-400 text-xs"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-slate-500">ประจำสัปดาห์ / เดือน *</label>
+                            <input type="week" id="formWeek" required class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-xs">
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-slate-500">ผู้เข้าตรวจประเมิน (Auditor) *</label>
+                            <input type="text" id="formAuditor" placeholder="ระบุชื่อผู้ประเมิน" required class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 font-medium text-xs">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Station Filter Quick Nav Bar -->
+                <div class="flex items-center justify-start bg-slate-100 p-1.5 sm:p-2 rounded-xl text-xs font-semibold overflow-x-auto no-scrollbar gap-1.5 my-3">
+                    <span class="text-slate-500 px-2 whitespace-nowrap text-[11px] sm:text-xs"><i class="fa-solid fa-filter mr-1"></i>สถานี:</span>
+                    <button type="button" onclick="filterFormCategory('ALL')" class="px-3 py-1.5 rounded-lg bg-white shadow-sm text-blue-600 font-bold whitespace-nowrap flex-shrink-0">ทั้งหมด (7 สถานี)</button>
+                    <button type="button" onclick="filterFormCategory('Bar Station')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white/60 whitespace-nowrap flex-shrink-0">Bar Station</button>
+                    <button type="button" onclick="filterFormCategory('Call Order & Service Station')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white/60 whitespace-nowrap flex-shrink-0">Call & Service</button>
+                    <button type="button" onclick="filterFormCategory('เครื่อง xBloom Studio')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white/60 whitespace-nowrap flex-shrink-0">xBloom Studio</button>
+                    <button type="button" onclick="filterFormCategory('กาแฟและวัตถุดิบ')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white/60 whitespace-nowrap flex-shrink-0">กาแฟและวัตถุดิบ</button>
+                    <button type="button" onclick="filterFormCategory('ความสะอาดและความปลอดภัย')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white/60 whitespace-nowrap flex-shrink-0">ความสะอาด&ปลอดภัย</button>
+                    <button type="button" onclick="filterFormCategory('Environment Station')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white/60 whitespace-nowrap flex-shrink-0">Environment</button>
+                    <button type="button" onclick="filterFormCategory('Administration')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white/60 whitespace-nowrap flex-shrink-0">Administration</button>
+                </div>
+
+                <!-- Dynamic Audit Sections Container -->
+                <div id="dynamicAuditSections" class="space-y-4 sm:space-y-6">
+                </div>
+
+                <!-- Form Submit Action Bar -->
+                <div class="mt-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-md flex flex-col sm:flex-row justify-between items-center gap-3">
+                    <p class="text-xs text-slate-500 text-center sm:text-left">ตรวจสอบความถูกต้องก่อนกดบันทึกผลการประเมินประจำสัปดาห์</p>
+                    <div class="flex space-x-2 w-full sm:w-auto">
+                        <button type="button" onclick="switchTab('dashboard')" class="flex-1 sm:flex-none px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">ยกเลิก</button>
+                        <button type="submit" class="flex-1 sm:flex-none px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-md transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-paper-plane"></i>
+                            <span>บันทึกผลการตรวจประเมิน</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Sticky Mobile Bottom Score Bar -->
+        <div id="mobileLiveScoreBar" class="fixed bottom-0 left-0 right-0 bg-slate-900 text-white p-3 border-t border-slate-800 shadow-2xl z-40 sm:hidden hidden">
+            <div class="flex items-center justify-between max-w-7xl mx-auto">
+                <div class="flex items-center space-x-3">
+                    <div>
+                        <p class="text-[9px] text-slate-400 uppercase font-semibold leading-none">คะแนนสดรวม</p>
+                        <p id="mobileLiveTotalScore" class="text-xl font-black text-emerald-400 leading-tight">100%</p>
+                    </div>
+                    <div class="h-6 w-px bg-slate-700"></div>
+                    <div class="text-[10px] flex space-x-2 text-slate-300">
+                        <span>Q:<strong id="mobileLiveQScore" class="text-white ml-0.5">100%</strong></span>
+                        <span>S:<strong id="mobileLiveSScore" class="text-white ml-0.5">100%</strong></span>
+                        <span>C:<strong id="mobileLiveCScore" class="text-white ml-0.5">100%</strong></span>
+                    </div>
+                </div>
+                <button onclick="window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'})" class="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold shadow">
+                    ลงชื่อบันทึก
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 3: HISTORY & REPORTS -->
+        <div id="tab-history" class="hidden space-y-4 sm:space-y-6">
+            <div class="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-900">ประวัติรายงานการประเมิน QSC ย้อนหลัง</h2>
+                        <p class="text-xs text-slate-500">รายการบันทึกผลตรวจประจำสัปดาห์ย้อนหลัง</p>
+                    </div>
+                    <button onclick="exportHistoryCSV()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>ส่งออกไฟล์ Excel / CSV</span>
+                    </button>
+                </div>
+
+                <!-- Table Container -->
+                <div class="overflow-x-auto -mx-4 sm:mx-0">
+                    <div class="inline-block min-w-full align-middle px-4 sm:px-0">
+                        <table class="min-w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-500 text-[11px] sm:text-xs font-semibold uppercase border-b border-slate-200">
+                                    <th class="p-2.5 sm:p-3 whitespace-nowrap">สัปดาห์</th>
+                                    <th class="p-2.5 sm:p-3 whitespace-nowrap">สาขา</th>
+                                    <th class="p-2.5 sm:p-3 whitespace-nowrap">ผู้ประเมิน</th>
+                                    <th class="p-2.5 sm:p-3 text-center whitespace-nowrap">Quality</th>
+                                    <th class="p-2.5 sm:p-3 text-center whitespace-nowrap">Service</th>
+                                    <th class="p-2.5 sm:p-3 text-center whitespace-nowrap">Cleanliness</th>
+                                    <th class="p-2.5 sm:p-3 text-center whitespace-nowrap">คะแนนรวม</th>
+                                    <th class="p-2.5 sm:p-3 text-center whitespace-nowrap">สถานะ</th>
+                                    <th class="p-2.5 sm:p-3 text-right whitespace-nowrap">การจัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody" class="text-xs sm:text-sm divide-y divide-slate-100 font-medium text-slate-700">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: MANAGE CRITERIA & USER ACCOUNTS -->
+        <div id="tab-settings" class="hidden space-y-6">
+            
+            <!-- User Accounts Management Section -->
+            <div class="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-users-gear text-blue-600"></i>
+                            <span>จัดการผู้ใช้งานระบบ (User Accounts)</span>
+                        </h2>
+                        <p class="text-xs text-slate-500">กำหนด Username, Password และสิทธิ์ผู้ใช้งาน</p>
+                    </div>
+                    <button onclick="openAddUserModal()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-user-plus"></i>
+                        <span>เพิ่มผู้ใช้งานใหม่</span>
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-left text-xs">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-200">
+                                <th class="p-2.5">ชื่อผู้ใช้งาน (Username)</th>
+                                <th class="p-2.5">ชื่อ - นามสกุล</th>
+                                <th class="p-2.5">บทบาท (Role)</th>
+                                <th class="p-2.5 text-right">การจัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Criteria Checklist Setup Section -->
+            <div class="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-blue-600"></i>
+                            <span>จัดการหัวข้อเกณฑ์การประเมิน (QSC Checklist Setup)</span>
+                        </h2>
+                        <p class="text-xs text-slate-500">สามารถเพิ่ม แก้ไข หรือลบหัวข้อประเมินในระบบได้ที่นี่</p>
+                    </div>
+                    <button onclick="openAddItemModal()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>เพิ่มข้อประเมินใหม่</span>
+                    </button>
+                </div>
+
+                <!-- List of Criteria -->
+                <div class="space-y-6" id="criteriaManagementList">
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Add/Edit User Modal -->
+    <div id="userModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 id="userModalTitle" class="font-bold text-slate-900 text-sm sm:text-base">เพิ่มผู้ใช้งานใหม่</h3>
+                <button onclick="closeUserModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form onsubmit="handleSaveUser(event)" class="space-y-3 text-xs font-medium">
+                <input type="hidden" id="userModalId">
+                <div>
+                    <label class="block text-slate-600 mb-1">ชื่อผู้ใช้งาน (Username) *</label>
+                    <input type="text" id="userModalUsername" required placeholder="เช่น john_mgr" class="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-bold">
+                </div>
+                <div>
+                    <label class="block text-slate-600 mb-1">รหัสผ่าน (Password) *</label>
+                    <input type="password" id="userModalPassword" required placeholder="กำหนดรหัสผ่าน" class="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-bold">
+                </div>
+                <div>
+                    <label class="block text-slate-600 mb-1">ชื่อ - นามสกุล / ชื่อผู้ประเมิน *</label>
+                    <input type="text" id="userModalName" required placeholder="เช่น คุณสมชาย (Area Manager)" class="w-full border border-slate-300 rounded-lg p-2.5 text-xs">
+                </div>
+                <div>
+                    <label class="block text-slate-600 mb-1">บทบาท / ตำแหน่ง *</label>
+                    <select id="userModalRole" required class="w-full border border-slate-300 rounded-lg p-2.5 text-xs">
+                        <option value="Admin / Area Manager">Admin / Area Manager</option>
+                        <option value="QSC Auditor">QSC Auditor</option>
+                        <option value="Store Manager">Store Manager</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeUserModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">ยกเลิก</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">บันทึกข้อมูลผู้ใช้</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- CAPA Action Plan Modal -->
+    <div id="actionModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                    <i class="fa-solid fa-screwdriver-wrench text-blue-600"></i>
+                    <span>แผนติดตามแก้ไขข้อบกพร่อง (CAPA Plan)</span>
+                </h3>
+                <button onclick="closeActionModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div id="actionModalItemDetail" class="p-3 bg-slate-50 rounded-xl text-xs space-y-1 border border-slate-200">
+                <p id="actionItemTitle" class="font-bold text-slate-900"></p>
+                <p id="actionItemAuditorNote" class="text-slate-500 italic"></p>
+            </div>
+
+            <form onsubmit="saveActionPlan(event)" class="space-y-3 text-xs font-medium">
+                <input type="hidden" id="actionItemId">
+                <div>
+                    <label class="block text-slate-600 mb-1">การปฏิบัติการแก้ไข (Corrective Action) *</label>
+                    <textarea id="capaAction" required rows="2" placeholder="ระบุสิ่งที่ได้ดำเนินการแก้ไขทันที..." class="w-full border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-blue-500 focus:border-blue-500"></textarea>
+                </div>
+                <div>
+                    <label class="block text-slate-600 mb-1">การป้องกันการเกิดซ้ำ (Preventive Action) *</label>
+                    <textarea id="capaPrevention" required rows="2" placeholder="ระบุมาตรการป้องกันเพื่อไม่ให้เกิดซ้ำอีก..." class="w-full border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-blue-500 focus:border-blue-500"></textarea>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-slate-600 mb-1">ผู้รับผิดชอบ (Owner) *</label>
+                        <input type="text" id="capaOwner" required placeholder="เช่น ผู้จัดการสาขา" class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-slate-600 mb-1">กำหนดเสร็จ (Due Date) *</label>
+                        <input type="date" id="capaDueDate" required class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+                    </div>
+                </div>
+
+                <!-- Attach Photo to CAPA -->
+                <div>
+                    <label class="block text-slate-600 mb-1">แนบรูปถ่ายหลักฐานการแก้ไข (ถ้ามี - ไม่บังคับ)</label>
+                    <div class="flex items-center space-x-2">
+                        <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-300 font-semibold text-xs inline-flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-camera text-blue-600"></i>
+                            <span>เลือกรูปภาพ / ถ่ายรูป</span>
+                            <input type="file" accept="image/*" capture="environment" onchange="handleCapaImageUpload(this)" class="hidden">
+                        </label>
+                        <span id="capaImageName" class="text-[11px] text-slate-400 truncate max-w-[150px]">ยังไม่ได้เลือกรูป</span>
+                    </div>
+                    <div id="capaImagePreviewBox" class="hidden mt-2 relative w-20 h-20 rounded-lg border border-slate-200 overflow-hidden">
+                        <img id="capaImagePreview" class="w-full h-full object-cover" alt="CAPA Preview">
+                        <button type="button" onclick="removeCapaImage()" class="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[9px] flex items-center justify-center shadow">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeActionModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">ยกเลิก</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">บันทึกแผน CAPA</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Item Modal -->
+    <div id="addItemModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                    <i class="fa-solid fa-plus-circle text-blue-600"></i>
+                    <span>เพิ่มข้อประเมินใหม่</span>
+                </h3>
+                <button onclick="closeAddItemModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form onsubmit="handleCreateCriterion(event)" class="space-y-4 text-xs font-medium">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="sm:col-span-2">
+                        <label class="block text-slate-600 mb-1">หมวดหมู่หลัก (Station) *</label>
+                        <select id="modalCategory" required class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+                            <option value="Bar Station">Bar Station</option>
+                            <option value="Call Order & Service Station">Call Order & Service Station</option>
+                            <option value="เครื่อง xBloom Studio">เครื่อง xBloom Studio</option>
+                            <option value="กาแฟและวัตถุดิบ">กาแฟและวัตถุดิบ</option>
+                            <option value="ความสะอาดและความปลอดภัย">ความสะอาดและความปลอดภัย</option>
+                            <option value="Environment Station">Environment Station</option>
+                            <option value="Administration">Administration</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-600 mb-1">หมวด QSC *</label>
+                        <select id="modalPillar" required class="w-full border border-slate-300 rounded-lg p-2 text-xs font-bold">
+                            <option value="Q">Q - Quality</option>
+                            <option value="S">S - Service</option>
+                            <option value="C">C - Cleanliness</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-600 mb-1">ชื่อข้อการประเมิน *</label>
+                    <input type="text" id="modalTitle" required placeholder="เช่น เมล็ดกาแฟปิดถุงสนิท ไม่เปิดทิ้งไว้" class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+                </div>
+                <div>
+                    <label class="block text-slate-600 mb-1">คำอธิบายเกณฑ์และวิธีตรวจประเมิน</label>
+                    <textarea id="modalDesc" rows="2" placeholder="อธิบายเกณฑ์ผ่าน/ไม่ผ่าน หรือจุดสุ่มตรวจ..." class="w-full border border-slate-300 rounded-lg p-2 text-xs"></textarea>
+                </div>
+                <div class="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeAddItemModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">ยกเลิก</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">บันทึกเพิ่มหัวข้อ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Item Modal -->
+    <div id="editItemModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square text-blue-600"></i>
+                    <span>แก้ไขข้อประเมิน</span>
+                </h3>
+                <button onclick="closeEditItemModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form onsubmit="handleEditCriterion(event)" class="space-y-4 text-xs font-medium">
+                <input type="hidden" id="editModalItemId">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="sm:col-span-2">
+                        <label class="block text-slate-600 mb-1">หมวดหมู่หลัก (Station) *</label>
+                        <select id="editModalCategory" required class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+                            <option value="Bar Station">Bar Station</option>
+                            <option value="Call Order & Service Station">Call Order & Service Station</option>
+                            <option value="เครื่อง xBloom Studio">เครื่อง xBloom Studio</option>
+                            <option value="กาแฟและวัตถุดิบ">กาแฟและวัตถุดิบ</option>
+                            <option value="ความสะอาดและความปลอดภัย">ความสะอาดและความปลอดภัย</option>
+                            <option value="Environment Station">Environment Station</option>
+                            <option value="Administration">Administration</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-600 mb-1">หมวด QSC *</label>
+                        <select id="editModalPillar" required class="w-full border border-slate-300 rounded-lg p-2 text-xs font-bold">
+                            <option value="Q">Q - Quality</option>
+                            <option value="S">S - Service</option>
+                            <option value="C">C - Cleanliness</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-600 mb-1">ชื่อข้อการประเมิน *</label>
+                    <input type="text" id="editModalTitle" required class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+                </div>
+                <div>
+                    <label class="block text-slate-600 mb-1">คำอธิบายเกณฑ์และวิธีตรวจประเมิน</label>
+                    <textarea id="editModalDesc" rows="2" class="w-full border border-slate-300 rounded-lg p-2 text-xs"></textarea>
+                </div>
+                <div class="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeEditItemModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">ยกเลิก</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">บันทึกการแก้ไข</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Audit Detail Modal -->
+    <div id="auditDetailModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div>
+                    <h3 id="detailModalTitle" class="font-bold text-slate-900 text-sm sm:text-base">รายละเอียดผลการประเมิน</h3>
+                    <p id="detailModalSubtitle" class="text-xs text-slate-500"></p>
+                </div>
+                <button onclick="closeAuditDetailModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-4 gap-2 text-center p-3 bg-slate-50 rounded-xl text-xs">
+                <div><p class="text-slate-400">Overall</p><p id="detailTotalScore" class="font-bold text-slate-800 text-base">-</p></div>
+                <div><p class="text-slate-400">Quality</p><p id="detailQScore" class="font-bold text-blue-600 text-base">-</p></div>
+                <div><p class="text-slate-400">Service</p><p id="detailSScore" class="font-bold text-emerald-600 text-base">-</p></div>
+                <div><p class="text-slate-400">Cleanliness</p><p id="detailCScore" class="font-bold text-amber-600 text-base">-</p></div>
+            </div>
+
+            <div id="detailModalItemsList" class="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+            </div>
+
+            <div class="flex justify-end pt-2 border-t border-slate-100">
+                <button type="button" onclick="closeAuditDetailModal()" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900">ปิดหน้าต่าง</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 left-5 sm:left-auto bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transition-all duration-300 transform translate-y-24 opacity-0 z-50">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-base sm:text-lg flex-shrink-0"></i>
+        <span id="toastMessage" class="text-xs font-medium truncate">ทำรายการสำเร็จ</span>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-3 sm:py-4 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center text-[11px] sm:text-xs text-slate-400">
+            xBloom QSC Quality, Service & Cleanliness Management Dashboard &copy; 2026.
+        </div>
+    </footer>
+
+    <script>
+        // User Account State
+        let usersList = [
+            { id: 'usr_1', username: 'admin', password: 'xbloom123', name: 'คุณสมชาย (Area Manager)', role: 'Admin / Area Manager' },
+            { id: 'usr_2', username: 'auditor', password: 'xbloom123', name: 'คุณวิภา (Auditor)', role: 'QSC Auditor' }
+        ];
+        let currentUser = null;
+
+        // Cleared History Data for Fresh Starts
+        let historyData = [];
+
+        const initialChecklist = [
+            // 1. Environment Station & Service Area
+            { id: 'item_1', category: 'Environment Station', qscPillar: 'C', title: 'หน้าร้านสะอาด อยู่ในสภาพพร้อมเปิดให้บริการ', desc: 'ตรวจเช็กความสะอาดเรียบร้อยบริเวณหน้าร้าน' },
+            { id: 'item_2', category: 'Environment Station', qscPillar: 'C', title: 'ป้ายร้าน ป้ายเมนู ป้ายโปรโมชัน และสื่อหน้าร้านติดตั้งครบ ถูกต้อง และเป็นปัจจุบัน', desc: 'สื่อโปรโมชันตรงตามแคมเปญปัจจุบัน' },
+            { id: 'item_3', category: 'Environment Station', qscPillar: 'C', title: 'ป้ายและสื่อต่าง ๆ อยู่ในสภาพสมบูรณ์ ไม่ซีดจาง ไม่ชำรุด และไม่มีฝุ่น', desc: 'ตรวจสอบความสมบูรณ์และไร้ฝุ่นของป้ายสื่อ' },
+            { id: 'item_4', category: 'Environment Station', qscPillar: 'C', title: 'กระจก ประตู และบริเวณทางเข้างหน้าร้านสะอาด', desc: 'กระจกใส ไร้รอยนิ้วมือและคราบสกปรก' },
+            { id: 'item_5', category: 'Environment Station', qscPillar: 'C', title: 'โต๊ะและเก้าอี้ลูกค้าสะอาด ไม่ชำรุด และจัดวางเรียบร้อย', desc: 'โต๊ะเช็ดสะอาด ไม่เหนียว จัดวางเป็นระเบียบ' },
+            { id: 'item_6', category: 'Environment Station', qscPillar: 'C', title: 'พื้นและทางเดินสะอาด แห้ง ไม่ลื่น และไม่มีสิ่งกีดขวาง', desc: 'พื้นแห้ง ปลอดภัย ไม่มีน้ำขัง' },
+            { id: 'item_7', category: 'Environment Station', qscPillar: 'C', title: 'จุดสัมผัสลูกค้า เช่น เคาน์เตอร์ และจุดรับสินค้า สะอาด', desc: 'จุดสัมผัสร่วมทำความสะอาดฆ่าเชื้อสม่ำเสมอ' },
+            { id: 'item_8', category: 'Environment Station', qscPillar: 'C', title: 'ถังขยะไม่ล้น สะอาด และอยู่ในสภาพพร้อมใช้งาน', desc: 'เปลี่ยนถุงขยะตามเวลา ถังขยะมีฝาปิดเรียบร้อย' },
+            { id: 'item_9', category: 'Environment Station', qscPillar: 'C', title: 'ตู้โชว์สินค้าและชั้นวางสินค้าสะอาด จัดวางเป็นระเบียบ และป้ายราคาชัดเจน', desc: 'ชั้นวางสินค้าสะอาด เติมสินค้าและติดป้ายราคาครบ' },
+            { id: 'item_10', category: 'Environment Station', qscPillar: 'S', title: 'แสงสว่าง อุณหภูมิ กลิ่น และบรรยากาศภายในร้านเหมาะสม', desc: 'บรรยากาศในร้านเย็นสบาย กลิ่นหอม ไม่มีกลิ่นอับ' },
+
+            // 2. Call Order & Service Station
+            { id: 'item_11', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานแต่งกายถูกต้องตาม Uniform Standard', desc: 'สวมเครื่องแบบถูกต้องตามเกณฑ์บริษัท' },
+            { id: 'item_12', category: 'Call Order & Service Station', qscPillar: 'S', title: 'เสื้อผ้า หน้า ผม และรองเท้าของพนักงานสะอาดและเรียบร้อย', desc: 'หมวก/เน็ตเก็บผม ยูนิฟอร์มสะอาด รองเท้าหุ้มส้น' },
+            { id: 'item_13', category: 'Call Order & Service Station', qscPillar: 'S', title: 'เล็บมือพนักงานสะอาดและเป็นไปตามมาตรฐานสุขลักษณะ', desc: 'ตัดเล็บสั้น ไม่ทาสีเล็บ สะอาด' },
+            { id: 'item_14', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานไม่ใช้โทรศัพท์ส่วนตัวระหว่างให้บริการลูกค้า', desc: 'งดเล่นโทรศัพท์ขณะปฏิบัติงานหน้าร้าน' },
+            { id: 'item_15', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานรับรู้และต้อนรับลูกค้าอย่างสุภาพ', desc: 'สบตา ยิ้มแย้ม ทักทายลูกค้าทันที' },
+            { id: 'item_16', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานใช้น้ำเสียง กิริยา และภาษาที่สุภาพเหมาะสม', desc: 'น้ำเสียงเป็นมิตร สุภาพ ไพเราะ' },
+            { id: 'item_17', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานตั้งใจรับฟังและรับ Order ได้ถูกต้อง', desc: 'ฟังความต้องการลูกค้าและบันทึกออเดอร์แม่นยำ' },
+            { id: 'item_18', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานสามารถแนะนำเมนู เครื่องดื่ม เมล็ดกาแฟ และโปรโมชันได้อย่างถูกต้อง', desc: 'เชียร์ขาย แนะนำเมล็ดและโปรโมชันได้คล่องแคล่ว' },
+            { id: 'item_19', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานสามารถตอบคำถามเกี่ยวกับสินค้าและส่วนประกอบได้', desc: 'ให้ข้อมูลส่วนผสมและสารก่อภูมิแพ้ได้' },
+            { id: 'item_20', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานทวน Order ก่อนยืนยันรายการ', desc: 'ทวนรายการอาหาร/เครื่องดื่ม และระดับความหวาน' },
+            { id: 'item_21', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานแจ้งเวลารอเมื่อลูกค้าต้องรอนานกว่ามาตรฐาน', desc: 'สื่อสารเวลารอคอยชัดเจนกรณีออเดอร์หนาแน่น' },
+            { id: 'item_22', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานสามารถรับมือและแก้ไขปัญหาหรือ Complaint ได้อย่างเหมาะสม', desc: 'จัดการข้อร้องเรียนเฉพาะหน้าอย่างนอบน้อมและรวดเร็ว' },
+            { id: 'item_23', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานกล่าวขอบคุณหรือปิดการบริการอย่างสุภาพ', desc: 'กล่าวขอบคุณด้วยความจริงใจทุกครั้ง' },
+            { id: 'item_24', category: 'Call Order & Service Station', qscPillar: 'S', title: 'เครื่อง POS พร้อมใช้งานและทำงานได้ตามปกติ', desc: 'ระบบขายหน้าร้านพร้อมทำงาน ไม่ค้าง' },
+            { id: 'item_25', category: 'Call Order & Service Station', qscPillar: 'S', title: 'เครื่อง EDC หรือระบบรับชำระเงินพร้อมใช้งาน', desc: 'เครื่องสแกน/แตะบัตร EDC สัญญาณดี พร้อมใช้งาน' },
+            { id: 'item_26', category: 'Call Order & Service Station', qscPillar: 'C', title: 'พื้นที่บริเวณ POS และ EDC สะอาด เป็นระเบียบ และไม่มีของที่ไม่เกี่ยวข้อง', desc: 'เคาน์เตอร์แคชเชียร์สะอาด ไร้สิ่งของส่วนตัว' },
+            { id: 'item_27', category: 'Call Order & Service Station', qscPillar: 'S', title: 'ราคา เมนู และโปรโมชันในระบบ POS ถูกต้องและเป็นปัจจุบัน', desc: 'ฐานข้อมูลราคาและโปรโมชันใน POS อัปเดตตรงกัน' },
+            { id: 'item_28', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานรับรายละเอียดระดับความหวาน ความต้องการพิเศษได้ถูกต้อง', desc: 'คีย์ระดับความหวาน และ Note สเปกพิเศษถูกต้อง' },
+            { id: 'item_29', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานแจ้งยอดชำระเงินถูกต้อง', desc: 'บอกยอดเงินและทวนเงินทอนชัดเจน' },
+            { id: 'item_30', category: 'Call Order & Service Station', qscPillar: 'S', title: 'พนักงานแจ้งจุดรับเครื่องดื่มหรือสินค้าให้ลูกค้าทราบ', desc: 'บอกตำแหน่งรับสินค้าแก่ลูกค้าชัดเจน' },
+            { id: 'item_31', category: 'Call Order & Service Station', qscPillar: 'S', title: 'Order ถูกส่งไปยัง Station ที่เกี่ยวข้องอย่างถูกต้อง', desc: 'ใบออเดอร์ส่งออกจอ KDS หรือปริ้นเตอร์บาร์ถูกต้อง' },
+            { id: 'item_32', category: 'Call Order & Service Station', qscPillar: 'S', title: 'ส่งมอบสินค้าได้ถูกต้องและครบตามรายการ', desc: 'เช็กความถูกต้องก่อนยื่นถุง/แก้วให้ลูกค้า' },
+
+            // 3. Bar Station
+            { id: 'item_33', category: 'Bar Station', qscPillar: 'Q', title: 'แก้ว ฝา หลอด ถุง และ Packaging สะอาดและถูกต้องตามมาตรฐาน', desc: 'บรรจุภัณฑ์สะอาด ไม่ชำรุด ตรงตามขนาดเมนู' },
+            { id: 'item_34', category: 'Bar Station', qscPillar: 'Q', title: 'พื้นที่ Bar อยู่ในสภาพพร้อมใช้งานก่อนเริ่มงาน', desc: 'บาร์จัดเตรียมวัตถุดิบและอุปกรณ์พร้อมเปิดร้าน' },
+            { id: 'item_35', category: 'Bar Station', qscPillar: 'Q', title: 'เครื่องมือและอุปกรณ์ Bar สะอาด ไม่ชำรุด และมีเพียงพอต่อการใช้งาน', desc: 'พิชเชอร์ แก้วตวง ช้อน ชา/กาแฟ สะอาดพร้อมใช้' },
+            { id: 'item_36', category: 'Bar Station', qscPillar: 'Q', title: 'วัตถุดิบที่ต้องใช้ในการผลิตเครื่องดื่มมีพร้อมใช้งาน', desc: 'นม นมสตรีม ไซรัป และวัตถุดิบพร้อมขาย' },
+            { id: 'item_37', category: 'Bar Station', qscPillar: 'Q', title: 'เครื่องดื่มผลิตตรงตามสูตรมาตรฐาน [สุ่มตรวจเมนู]', desc: 'สุ่มเช็คสเปก รสชาติ และส่วนผสมตาม SOP' },
+            { id: 'item_38', category: 'Bar Station', qscPillar: 'Q', title: 'ปริมาณวัตถุดิบที่ใช้ตรงตามสูตร', desc: 'ตวงวัดวัตถุดิบแม่นยำ ไม่ใส่ขาดหรือเกิน' },
+            { id: 'item_39', category: 'Bar Station', qscPillar: 'Q', title: 'ลำดับขั้นตอนและวิธีการทำเครื่องดื่มถูกต้อง', desc: 'ปฏิบัติตามลำดับการชงอย่างถูกต้อง' },
+            { id: 'item_40', category: 'Bar Station', qscPillar: 'Q', title: 'ใช้อุปกรณ์และภาชนะถูกต้องตามประเภทของเครื่องดื่ม', desc: 'เลือกแก้วร้อน/เย็น/ปั่น ถูกตามประเภท' },
+            { id: 'item_41', category: 'Bar Station', qscPillar: 'Q', title: 'น้ำแข็งได้มาตรฐาน สะอาด และมีเพียงพอต่อการใช้งาน', desc: 'ถังน้ำแข็งสะอาด ปริมาณพอเพียง' },
+            { id: 'item_42', category: 'Bar Station', qscPillar: 'C', title: 'อุปกรณ์ตักน้ำแข็งจัดเก็บและใช้งานอย่างถูกสุขลักษณะ', desc: 'ที่ตักน้ำแข็งมีที่แขวน/วาง ไม่แช่ทิ้งในถัง' },
+            { id: 'item_43', category: 'Bar Station', qscPillar: 'C', title: 'ผ้าทำความสะอาดใน Bar สะอาด ไม่มีกลิ่น และแยกใช้ตามประเภท', desc: 'ผ้าแยกสี ซักแช่น้ำยาฆ่าเชื้อ ไร้กลิ่นอับ' },
+            { id: 'item_44', category: 'Bar Station', qscPillar: 'C', title: 'พื้นที่ทำงานได้รับการทำความสะอาดหลังจบแต่ละ Order', desc: 'เช็ดเคาน์เตอร์ทันทีเมื่อชงเสร็จ' },
+            { id: 'item_45', category: 'Bar Station', qscPillar: 'Q', title: 'เครื่องดื่มมีหน้าตาและการจัดเสิร์ฟตรงตามมาตรฐาน', desc: 'ฟองนม ลายการตกแต่งหน้าตาตรงตามเกณฑ์' },
+            { id: 'item_46', category: 'Bar Station', qscPillar: 'Q', title: 'เครื่องดื่มมีกลิ่นและรสชาติถูกต้อง ไม่มีกลิ่นหรือรสผิดปกติ', desc: 'รสชาติกลมกล่อม ปราศจากกลิ่นเหม็นหืน' },
+            { id: 'item_47', category: 'Bar Station', qscPillar: 'Q', title: 'อุณหภูมิเครื่องดื่มเหมาะสมตามประเภทเมนู', desc: 'เครื่องดื่มร้อน/เย็น อุณหภูมิตามสเปก' },
+            { id: 'item_48', category: 'Bar Station', qscPillar: 'Q', title: 'ปริมาณเครื่องดื่มหรือ Fill Level เป็นไปตามมาตรฐาน', desc: 'ระดับเครื่องดื่มเต็มแก้วตามระดับมาตรฐาน' },
+
+            // 4. กาแฟและวัตถุดิบ
+            { id: 'item_49', category: 'กาแฟและวัตถุดิบ', qscPillar: 'Q', title: 'เมล็ดกาแฟที่ใช้งานตรงตามประเภทที่กำหนด', desc: 'เลือกถุงเมล็ดกาแฟตรงตามสั่งของลูกค้า' },
+            { id: 'item_50', category: 'กาแฟและวัตถุดิบ', qscPillar: 'Q', title: 'เมล็ดกาแฟจัดเก็บตามมาตรฐานและไม่เปิดซองทิ้งไว้โดยไม่ปิดสนิท', desc: 'ซีลพับปากถุงหรือติดกิ๊บล็อกทุกครั้งหลังใช้' },
+            { id: 'item_51', category: 'กาแฟและวัตถุดิบ', qscPillar: 'Q', title: 'เมล็ดกาแฟไม่มีกลิ่นหืนหรือสัญญาณเสื่อมคุณภาพ', desc: 'เมล็ดสดใหม่ สภาพสมบูรณ์ กลิ่นหอม' },
+            { id: 'item_52', category: 'กาแฟและวัตถุดิบ', qscPillar: 'Q', title: 'วัตถุดิบที่เปิดใช้มีวันที่เปิดและวันหมดอายุระบุชัดเจน', desc: 'ติด Tag แสดงวันที่เปิดและ Expire date' },
+            { id: 'item_54', category: 'กาแฟและวัตถุดิบ', qscPillar: 'Q', title: 'วัตถุดิบจัดเก็บเป็นสัดส่วนและเหมาะสมตามประเภท', desc: 'จัดเก็บวัตถุดิบตามหมวดหมู่ FIFO' },
+            { id: 'item_55', category: 'กาแฟและวัตถุดิบ', qscPillar: 'C', title: 'วัตถุดิบได้รับการป้องกันการปนเปื้อนอย่างเหมาะสม', desc: 'มีฝาปิดภาชนะวัตถุดิบมิดชิด' },
+            { id: 'item_56', category: 'กาแฟและวัตถุดิบ', qscPillar: 'Q', title: 'Stock วัตถุดิบมีเพียงพอต่อการขาย', desc: 'วัตถุดิบหลักเพียงพอ ไม่ปฏิเสธการขาย' },
+            { id: 'item_57', category: 'กาแฟและวัตถุดิบ', qscPillar: 'Q', title: 'ไม่พบ Short Stock หรือ Over Stock ผิดปกติ', desc: 'ปริมาณสต็อกสมดุลกับการใช้งานประจำวัน' },
+
+            // 5. เครื่อง xBloom Studio
+            { id: 'item_58', category: 'เครื่อง xBloom Studio', qscPillar: 'Q', title: 'เครื่อง xBloom Studio อยู่ในสภาพพร้อมใช้งาน', desc: 'ตัวเครื่องและระบบไฟพร้อมทำงานสมบูรณ์' },
+            { id: 'item_59', category: 'เครื่อง xBloom Studio', qscPillar: 'Q', title: 'เปิดและปิดเครื่องตามลำดับขั้นตอนที่กำหนด', desc: 'ปฏิบัติตามขั้นตอน SOP การเปิด-ปิดเครื่อง' },
+            { id: 'item_60', category: 'เครื่อง xBloom Studio', qscPillar: 'Q', title: 'เลือกเมล็ดและ Recipe/Profile ตรงกับเมนู', desc: 'เลือกสูตรการชงตรงตามเมล็ดกาแฟ' },
+            { id: 'item_61', category: 'เครื่อง xBloom Studio', qscPillar: 'Q', title: 'ตรวจน้ำ เมล็ด ภาชนะ และพื้นที่ก่อนชง', desc: 'เช็กแทงก์น้ำ เมล็ดกาแฟ และถ้วยรองก่อนชง' },
+            { id: 'item_62', category: 'เครื่อง xBloom Studio', qscPillar: 'C', title: 'เครื่องและบริเวณรอบเครื่องสะอาด ไม่มีคราบกาแฟสะสม', desc: 'ทำความสะอาดคราบกาแฟทันทีหลังสกัด' },
+            { id: 'item_63', category: 'เครื่อง xBloom Studio', qscPillar: 'C', title: 'อุปกรณ์หรือชิ้นส่วนที่สัมผัสกาแฟสะอาด', desc: 'หัวสกัดและชิ้นส่วนถอดล้างสะอาด' },
+            { id: 'item_64', category: 'เครื่อง xBloom Studio', qscPillar: 'C', title: 'มีการ Cleaning เครื่องตามรอบที่กำหนด', desc: 'ล้างทำความสะอาดเครื่องตามตารางประจำวัน' },
+            { id: 'item_65', category: 'เครื่อง xBloom Studio', qscPillar: 'Q', title: 'มีการ Maintenance เครื่องตามรอบที่กำหนด', desc: 'บำรุงรักษาและตรวจเช็กช่างตามรอบ' },
+            { id: 'item_66', category: 'เครื่อง xBloom Studio', qscPillar: 'Q', title: 'Recipe/Profile หรือค่าที่ตั้งในเครื่องเป็นเวอร์ชันปัจจุบัน', desc: 'อัปเดตซอฟต์แวร์และโปรไฟล์ชงเป็นเวอร์ชันล่าสุด' },
+            { id: 'item_67', category: 'เครื่อง xBloom Studio', qscPillar: 'Q', title: 'พนักงานรู้วิธีหยุดใช้งานและแจ้งผู้เกี่ยวข้องเมื่อเครื่องผิดปกติ', desc: 'เข้าใจขั้นตอนการรับมือฉุกเฉินเมื่อเครื่องมีปัญหา' },
+
+            // 6. ความสะอาดและความปลอดภัย
+            { id: 'item_68', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'พนักงานล้างมือและรักษาสุขลักษณะส่วนบุคคลตามมาตรฐาน', desc: 'ล้างมือด้วยสบู่ฆ่าเชื้อตามรอบและหลังแตะจุดเสี่ยง' },
+            { id: 'item_69', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'พื้นผิวและอุปกรณ์ที่สัมผัสอาหารหรือเครื่องดื่มสะอาด', desc: 'โต๊ะเตรียมอาหาร สัมผัสอาหารได้ปลอดภัย' },
+            { id: 'item_72', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'ห้อง Stock สะอาดและจัดเก็บสินค้าเป็นระเบียบ', desc: 'คลังสินค้าสะอาด สินค้าวางเรียงเป็นระเบียบ' },
+            { id: 'item_73', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'สินค้าและวัตถุดิบไม่วางสัมผัสพื้นโดยตรงตามมาตรฐานที่กำหนด', desc: 'วางสินค้าสูงจากพื้นอย่างน้อย 15 ซม.' },
+            { id: 'item_74', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'Food, Packaging, Chemical และของส่วนตัวจัดเก็บแยกพื้นที่', desc: 'แยกสารเคมี ของส่วนตัว และวัตถุดิบอาหารชัดเจน' },
+            { id: 'item_75', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'Q', title: 'เครื่องชงกาแฟ ตู้เย็น และอุปกรณ์หลักพร้อมใช้งาน', desc: 'ตู้เย็นทำความเย็นได้ตามอุณหภูมิเกณฑ์' },
+            { id: 'item_76', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'อุปกรณ์และเครื่องจักรได้รับการทำความสะอาดตามรอบ', desc: 'ล้างคอยล์ตู้เย็น ล้างเครื่องตามรอบตาราง' },
+            { id: 'item_77', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'ผนัง พื้น เพดาน กระจก และเฟอร์นิเจอร์สะอาดและอยู่ในสภาพดี', desc: 'ไม่มีคราบสกปรก คราบเชื้อรา หรือรอยแตกร้าว' },
+            { id: 'item_78', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'ไม่พบสายไฟ ปลั๊ก หรืออุปกรณ์ไฟฟ้าที่ชำรุดหรือเสี่ยงอันตราย', desc: 'ปลั๊กไฟและสายไฟอยู่ในสภาพสมบูรณ์ปลอดภัย' },
+            { id: 'item_79', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'พื้นที่ทำงานและทางเดินไม่มีความเสี่ยงต่อการลื่น สะดุด หรือเกิดอุบัติเหตุ', desc: 'ทางเดินโล่ง ไม่ลื่น ปลอดภัยต่อพนักงานและลูกค้า' },
+            { id: 'item_80', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'ทางออกและทางหนีไฟไม่มีสิ่งกีดขวาง', desc: 'ประตูหนีไฟเปิดออกได้ง่าย ปราศจากสิ่งกีดขวาง' },
+            { id: 'item_81', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'S', title: 'อุปกรณ์ที่ชำรุดมีการแจ้งซ่อมและติดตามสถานะ', desc: 'มีใบแจ้งซ่อมและติดตามงานช่างอย่างเป็นระบบ' },
+
+            // 7. Administration
+            { id: 'item_82', category: 'Administration', qscPillar: 'S', title: 'เอกสารรับสินค้า HQ และรับตรงได้รับเข้าระบบครบถึงปัจจุบัน', desc: 'คีย์รับสินค้าลงระบบคลัง HQ ครบถ้วน ไม่ค้าง' },
+            { id: 'item_83', category: 'Administration', qscPillar: 'S', title: 'เอกสารรับสินค้ามีหลักฐานและสามารถตรวจสอบย้อนหลังได้', desc: 'จัดเก็บใบส่งของ/ใบเสร็จเป็นหมวดหมู่' },
+            { id: 'item_84', category: 'Administration', qscPillar: 'S', title: 'Petty Cash มีเอกสารและหลักฐานครบถ้วน', desc: 'มีใบเสร็จประกอบการเบิกเงินสดสดย่อยครบ' },
+            { id: 'item_85', category: 'Administration', qscPillar: 'S', title: 'รายการ Petty Cash ที่ค้างเบิกหรือค้างเคลียร์สามารถตรวจสอบและติดตามได้', desc: 'สรุปยอดเงินสดย่อยสอดคล้องกับบัญชี' },
+            { id: 'item_86', category: 'Administration', qscPillar: 'S', title: 'ราคา โปรโมชัน และสื่อการขายได้รับการ Update ตามกำหนด', desc: 'อัปเดตสื่อขายหน้าร้านทันตามกำหนดเวลา' },
+            { id: 'item_87', category: 'Administration', qscPillar: 'S', title: 'Complaint หรือ Incident ที่เกิดขึ้นมีการบันทึกและติดตาม', desc: 'ลงบันทึกสมุดเคสอุบัติเหตุ/เคสร้องเรียน' },
+            { id: 'item_88', category: 'Administration', qscPillar: 'S', title: 'ข้อบกพร่องจากการตรวจครั้งก่อนได้รับการแก้ไขตามกำหนด', desc: 'ติดตามแก้ไขข้อตกจากสัปดาห์ก่อนหน้า' },
+            { id: 'item_89', category: 'Administration', qscPillar: 'S', title: 'ข้อบกพร่องที่ยังไม่แก้ไขมีผู้รับผิดชอบและกำหนดวันแล้วเสร็จชัดเจน', desc: 'มีผู้รับผิดชอบ CAPA Plan ชัดเจน' },
+            { id: 'item_90', category: 'Administration', qscPillar: 'S', title: 'ข้อไม่ผ่านรอบปัจจุบันมีการบันทึกรายละเอียดและหลักฐาน', desc: 'ถ่ายภาพและระบุรายละเอียดข้อบกพร่อง' },
+            { id: 'item_91', category: 'Administration', qscPillar: 'S', title: 'ข้อไม่ผ่านรอบปัจจุบันมีการระบุ Corrective Action', desc: 'เสนอแนวทางแก้ไขเบื้องต้นลงในแบบประเมิน' },
+
+            // 8. Food Safety & Zero Tolerance Critical Items
+            { id: 'item_92', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'Q', title: 'ไม่พบวัตถุดิบหรือสินค้าหมดอายุ [Food Safety Critical]', desc: 'ตรวจเช็กความปลอดภัยอาหาร ห้ามมีของหมดอายุเด็ดขาด' },
+            { id: 'item_93', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'ไม่พบสัตว์รบกวนหรือการปนเปื้อนที่มีความเสี่ยงต่อ Food Safety [Food Safety Critical]', desc: 'ห้ามพบสัตว์รบกวนในโซนเตรียมอาหารเด็ดขาด' },
+            { id: 'item_94', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'ไม่พบการจัดเก็บสารเคมีที่เสี่ยงปนเปื้อนอาหาร', desc: 'สารเคมีต้องจัดเก็บแยกห่างจากอาหารและเครื่องดื่ม' },
+            { id: 'item_95', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'Q', title: 'ไม่พบอาหารหรือวัตถุดิบอยู่ในอุณหภูมิไม่ปลอดภัย', desc: 'ตู้แช่เย็นต้องอุณหภูมิไม่เกิน 4°C ตู้แช่แข็งไม่เกิน -18°C' },
+            { id: 'item_96', category: 'ความสะอาดและความปลอดภัย', qscPillar: 'C', title: 'ไม่พบอุปกรณ์ไฟฟ้า เครื่องจักร หรือสภาพพื้นที่ที่มีความเสี่ยงอันตรายรุนแรง', desc: 'ตรวจเช็กความปลอดภัยของระบบไฟฟ้าและโครงสร้าง' }
+        ];
+
+        let checklistState = [...initialChecklist];
+        let currentFilterCategory = 'ALL';
+        let itemImages = {};
+        let currentCapaImage = null;
+
+        let lineChartInstance = null;
+        let radarChartInstance = null;
+
+        window.onload = function() {
+            renderAuditForm();
+            renderHistoryTable();
+            renderSettingsList();
+            renderUsersList();
+            initCharts();
+            setTodayWeek();
+            updateDashboardData();
+        };
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const uInput = document.getElementById('loginUsername').value.trim();
+            const pInput = document.getElementById('loginPassword').value.trim();
+            const errBox = document.getElementById('loginErrorMsg');
+
+            const foundUser = usersList.find(u => u.username === uInput && u.password === pInput);
+            if (foundUser) {
+                currentUser = foundUser;
+                if (errBox) errBox.classList.add('hidden');
+                document.getElementById('loginModal').classList.add('hidden');
+                
+                // Update Header UI
+                document.getElementById('headerUserName').innerText = currentUser.name;
+                document.getElementById('headerUserRole').innerText = currentUser.role;
+                document.getElementById('userHeaderBadge').classList.remove('hidden');
+                document.getElementById('userHeaderBadge').classList.add('flex');
+
+                // Auto-fill Auditor field in form
+                if (document.getElementById('formAuditor')) {
+                    document.getElementById('formAuditor').value = currentUser.name;
+                }
+
+                showToast(`ยินดีต้อนรับคุณ ${currentUser.name}`);
+            } else {
+                if (errBox) {
+                    errBox.classList.remove('hidden');
+                    document.getElementById('loginErrorText').innerText = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+                }
+            }
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            document.getElementById('userHeaderBadge').classList.add('hidden');
+            document.getElementById('userHeaderBadge').classList.remove('flex');
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginModal').classList.remove('hidden');
+            showToast('ออกจากระบบเรียบร้อยแล้ว');
+        }
+
+        function renderUsersList() {
+            const tbody = document.getElementById('usersTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = usersList.map(u => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-2.5 font-bold text-slate-900">${u.username}</td>
+                    <td class="p-2.5 text-slate-700">${u.name}</td>
+                    <td class="p-2.5"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold text-[10px]">${u.role}</span></td>
+                    <td class="p-2.5 text-right space-x-1">
+                        <button onclick="openEditUserModal('${u.id}')" class="text-slate-400 hover:text-blue-600 p-1" title="แก้ไขผู้ใช้"><i class="fa-solid fa-pen-to-square"></i></button>
+                        ${usersList.length > 1 ? `<button onclick="deleteUser('${u.id}')" class="text-slate-400 hover:text-rose-600 p-1" title="ลบผู้ใช้"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openAddUserModal() {
+            document.getElementById('userModalId').value = '';
+            document.getElementById('userModalTitle').innerText = 'เพิ่มผู้ใช้งานใหม่';
+            document.getElementById('userModalUsername').value = '';
+            document.getElementById('userModalPassword').value = '';
+            document.getElementById('userModalName').value = '';
+            document.getElementById('userModalRole').value = 'QSC Auditor';
+            document.getElementById('userModal').classList.remove('hidden');
+        }
+
+        function openEditUserModal(id) {
+            const u = usersList.find(x => x.id === id);
+            if (!u) return;
+            document.getElementById('userModalId').value = u.id;
+            document.getElementById('userModalTitle').innerText = 'แก้ไขข้อมูลผู้ใช้งาน';
+            document.getElementById('userModalUsername').value = u.username;
+            document.getElementById('userModalPassword').value = u.password;
+            document.getElementById('userModalName').value = u.name;
+            document.getElementById('userModalRole').value = u.role;
+            document.getElementById('userModal').classList.remove('hidden');
+        }
+
+        function closeUserModal() {
+            document.getElementById('userModal').classList.add('hidden');
+        }
+
+        function handleSaveUser(e) {
+            e.preventDefault();
+            const id = document.getElementById('userModalId').value;
+            const uname = document.getElementById('userModalUsername').value.trim();
+            const pass = document.getElementById('userModalPassword').value.trim();
+            const name = document.getElementById('userModalName').value.trim();
+            const role = document.getElementById('userModalRole').value;
+
+            if (id) {
+                const u = usersList.find(x => x.id === id);
+                if (u) {
+                    u.username = uname;
+                    u.password = pass;
+                    u.name = name;
+                    u.role = role;
+                }
+            } else {
+                usersList.push({
+                    id: 'usr_' + Date.now(),
+                    username: uname,
+                    password: pass,
+                    name: name,
+                    role: role
+                });
+            }
+
+            closeUserModal();
+            renderUsersList();
+            showToast('บันทึกข้อมูลผู้ใช้งานเรียบร้อยแล้ว');
+        }
+
+        function deleteUser(id) {
+            if (usersList.length <= 1) return;
+            usersList = usersList.filter(u => u.id !== id);
+            renderUsersList();
+            showToast('ลบผู้ใช้งานเรียบร้อยแล้ว');
+        }
+
+        function switchTab(tabId) {
+            ['dashboard', 'audit', 'history', 'settings'].forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                const btn = document.getElementById(`tab-${t}-btn`);
+                if (el) el.classList.add('hidden');
+                if (btn) {
+                    btn.classList.remove('tab-active');
+                    btn.classList.add('text-slate-500', 'border-transparent');
+                }
+            });
+
+            const targetTab = document.getElementById(`tab-${tabId}`);
+            const targetBtn = document.getElementById(`tab-${tabId}-btn`);
+            if (targetTab) targetTab.classList.remove('hidden');
+            if (targetBtn) {
+                targetBtn.classList.add('tab-active');
+                targetBtn.classList.remove('text-slate-500', 'border-transparent');
+            }
+
+            const mobileScoreBar = document.getElementById('mobileLiveScoreBar');
+            if (mobileScoreBar) {
+                if (tabId === 'audit') {
+                    mobileScoreBar.classList.remove('hidden');
+                } else {
+                    mobileScoreBar.classList.add('hidden');
+                }
+            }
+        }
+
+        function setTodayWeek() {
+            const date = new Date();
+            const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+            const weekString = `${d.getUTCFullYear()}-W${weekNo < 10 ? '0' + weekNo : weekNo}`;
+            if (document.getElementById('formWeek')) {
+                document.getElementById('formWeek').value = weekString;
+            }
+        }
+
+        function filterFormCategory(cat) {
+            currentFilterCategory = cat;
+            renderAuditForm();
+        }
+
+        function renderAuditForm() {
+            const container = document.getElementById('dynamicAuditSections');
+            if (!container) return;
+
+            const categories = [
+                'Bar Station',
+                'Call Order & Service Station',
+                'เครื่อง xBloom Studio',
+                'กาแฟและวัตถุดิบ',
+                'ความสะอาดและความปลอดภัย',
+                'Environment Station',
+                'Administration'
+            ];
+
+            const filteredCategories = currentFilterCategory === 'ALL' 
+                ? categories 
+                : categories.filter(c => c === currentFilterCategory);
+
+            container.innerHTML = filteredCategories.map(cat => {
+                const items = checklistState.filter(i => i.category === cat);
+                if (items.length === 0) return '';
+
+                return `
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="bg-slate-800 text-white p-3.5 sm:p-4 flex justify-between items-center">
+                            <h3 class="font-bold text-xs sm:text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-layer-group text-blue-400"></i>
+                                <span>${cat}</span>
+                            </h3>
+                            <span class="text-[10px] sm:text-xs bg-slate-700 px-2 py-0.5 rounded font-medium">${items.length} รายการ</span>
+                        </div>
+                        <div class="divide-y divide-slate-100 p-2 sm:p-4 space-y-4 sm:space-y-3">
+                            ${items.map((item, idx) => `
+                                <div class="pt-3 first:pt-0">
+                                    <div class="flex flex-col sm:flex-row justify-between items-start gap-3">
+                                        <div class="space-y-1 flex-grow">
+                                            <div class="flex items-start gap-2">
+                                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold text-white shrink-0 mt-0.5 ${item.qscPillar === 'Q' ? 'bg-blue-600' : item.qscPillar === 'S' ? 'bg-emerald-600' : 'bg-amber-600'}">
+                                                    ${item.qscPillar}
+                                                </span>
+                                                <p class="text-xs sm:text-sm font-bold text-slate-800 leading-snug">${item.title}</p>
+                                            </div>
+                                            <p class="text-[11px] text-slate-500 pl-7">${item.desc || 'เกณฑ์ตรวจมาตรฐาน SOP'}</p>
+                                        </div>
+
+                                        <!-- Score Radios -->
+                                        <div class="grid grid-cols-3 gap-1 w-full sm:w-auto shrink-0 bg-slate-100 p-1 rounded-xl">
+                                            <label class="cursor-pointer">
+                                                <input type="radio" name="score_${item.id}" value="100" checked onchange="calculateLiveScore()" class="peer hidden">
+                                                <div class="py-2 sm:py-1.5 px-3 rounded-lg text-[11px] font-bold text-center text-slate-500 peer-checked:bg-emerald-600 peer-checked:text-white transition">
+                                                    ผ่าน
+                                                </div>
+                                            </label>
+                                            <label class="cursor-pointer">
+                                                <input type="radio" name="score_${item.id}" value="50" onchange="calculateLiveScore()" class="peer hidden">
+                                                <div class="py-2 sm:py-1.5 px-3 rounded-lg text-[11px] font-bold text-center text-slate-500 peer-checked:bg-amber-500 peer-checked:text-white transition">
+                                                    บางส่วน
+                                                </div>
+                                            </label>
+                                            <label class="cursor-pointer">
+                                                <input type="radio" name="score_${item.id}" value="0" onchange="calculateLiveScore()" class="peer hidden">
+                                                <div class="py-2 sm:py-1.5 px-3 rounded-lg text-[11px] font-bold text-center text-slate-500 peer-checked:bg-rose-600 peer-checked:text-white transition">
+                                                    ตก
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Feedback Comment Box & Photo Upload -->
+                                    <div class="mt-2 pl-0 sm:pl-7 flex flex-col sm:flex-row gap-2 items-start">
+                                        <input type="text" id="note_${item.id}" placeholder="บันทึกข้อเสนอแนะ..." class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-blue-500 focus:bg-white">
+                                        <div class="flex items-center space-x-2 shrink-0">
+                                            <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-2 rounded-lg border border-slate-200 font-semibold text-[11px] flex items-center gap-1 transition">
+                                                <i class="fa-solid fa-camera text-blue-600"></i>
+                                                <span class="whitespace-nowrap">ถ่ายรูป/แนบไฟล์</span>
+                                                <input type="file" accept="image/*" capture="environment" onchange="handleImageUpload(this, '${item.id}')" class="hidden">
+                                            </label>
+                                            <div id="img_preview_box_${item.id}" class="${itemImages[item.id] ? 'flex' : 'hidden'} items-center space-x-1 bg-slate-100 p-1 rounded-lg border">
+                                                <img id="img_preview_${item.id}" src="${itemImages[item.id] || ''}" class="w-7 h-7 object-cover rounded" alt="Preview">
+                                                <button type="button" onclick="removeImage('${item.id}')" class="text-rose-600 hover:text-rose-800 text-xs p-1"><i class="fa-solid fa-circle-xmark"></i></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            calculateLiveScore();
+        }
+
+        function handleImageUpload(input, itemId) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    itemImages[itemId] = e.target.result;
+                    const previewBox = document.getElementById(`img_preview_box_${itemId}`);
+                    const previewImg = document.getElementById(`img_preview_${itemId}`);
+                    if (previewBox && previewImg) {
+                        previewImg.src = e.target.result;
+                        previewBox.classList.remove('hidden');
+                        previewBox.classList.add('flex');
+                    }
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function removeImage(itemId) {
+            delete itemImages[itemId];
+            const previewBox = document.getElementById(`img_preview_box_${itemId}`);
+            if (previewBox) {
+                previewBox.classList.add('hidden');
+                previewBox.classList.remove('flex');
+            }
+        }
+
+        function calculateLiveScore() {
+            let totalMax = 0;
+            let totalEarned = 0;
+            let qMax = 0, qEarned = 0;
+            let sMax = 0, sEarned = 0;
+            let cMax = 0, cEarned = 0;
+
+            checklistState.forEach(item => {
+                const selectedRadios = document.getElementsByName(`score_${item.id}`);
+                let val = 100;
+                for (let r of selectedRadios) {
+                    if (r.checked) {
+                        val = parseInt(r.value);
+                        break;
+                    }
+                }
+
+                totalMax += 100;
+                totalEarned += val;
+
+                if (item.qscPillar === 'Q') { qMax += 100; qEarned += val; }
+                else if (item.qscPillar === 'S') { sMax += 100; sEarned += val; }
+                else if (item.qscPillar === 'C') { cMax += 100; cEarned += val; }
+            });
+
+            const totalScore = totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : 100;
+            const qScore = qMax > 0 ? Math.round((qEarned / qMax) * 100) : 100;
+            const sScore = sMax > 0 ? Math.round((sEarned / sMax) * 100) : 100;
+            const cScore = cMax > 0 ? Math.round((cEarned / cMax) * 100) : 100;
+
+            document.getElementById('liveTotalScore').innerText = `${totalScore}%`;
+            document.getElementById('liveQScore').innerText = `${qScore}%`;
+            document.getElementById('liveSScore').innerText = `${sScore}%`;
+            document.getElementById('liveCScore').innerText = `${cScore}%`;
+
+            if (document.getElementById('mobileLiveTotalScore')) {
+                document.getElementById('mobileLiveTotalScore').innerText = `${totalScore}%`;
+                document.getElementById('mobileLiveQScore').innerText = `${qScore}%`;
+                document.getElementById('mobileLiveSScore').innerText = `${sScore}%`;
+                document.getElementById('mobileLiveCScore').innerText = `${cScore}%`;
+            }
+        }
+
+        function handleAuditSubmit(e) {
+            e.preventDefault();
+            const weekVal = document.getElementById('formWeek').value;
+            const auditorVal = document.getElementById('formAuditor').value.trim();
+
+            if (!weekVal || !auditorVal) {
+                alert('กรุณากรอกข้อมูลสัปดาห์และชื่อผู้ประเมินให้ครบถ้วน');
+                return;
+            }
+
+            let totalMax = 0, totalEarned = 0;
+            let qMax = 0, qEarned = 0;
+            let sMax = 0, sEarned = 0;
+            let cMax = 0, cEarned = 0;
+            let failedItems = [];
+
+            checklistState.forEach(item => {
+                const radios = document.getElementsByName(`score_${item.id}`);
+                let val = 100;
+                for (let r of radios) {
+                    if (r.checked) {
+                        val = parseInt(r.value);
+                        break;
+                    }
+                }
+                const note = document.getElementById(`note_${item.id}`)?.value || '';
+
+                totalMax += 100;
+                totalEarned += val;
+
+                if (item.qscPillar === 'Q') { qMax += 100; qEarned += val; }
+                else if (item.qscPillar === 'S') { sMax += 100; sEarned += val; }
+                else if (item.qscPillar === 'C') { cMax += 100; cEarned += val; }
+
+                if (val < 100) {
+                    failedItems.push({
+                        id: item.id,
+                        title: item.title,
+                        category: item.category,
+                        qscPillar: item.qscPillar,
+                        score: val,
+                        note: note,
+                        image: itemImages[item.id] || null,
+                        actionPlan: null
+                    });
+                }
+            });
+
+            const totalScore = totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : 100;
+            const qScore = qMax > 0 ? Math.round((qEarned / qMax) * 100) : 100;
+            const sScore = sMax > 0 ? Math.round((sEarned / sMax) * 100) : 100;
+            const cScore = cMax > 0 ? Math.round((cEarned / cMax) * 100) : 100;
+
+            const newRecord = {
+                id: 'audit_' + Date.now(),
+                week: weekVal,
+                branch: 'Central World',
+                auditor: auditorVal,
+                date: new Date().toLocaleDateString('th-TH'),
+                total: totalScore,
+                qScore: qScore,
+                sScore: sScore,
+                cScore: cScore,
+                status: totalScore >= 85 ? 'PASSED' : 'ACTION NEEDED',
+                failedItems: failedItems
+            };
+
+            historyData.unshift(newRecord);
+
+            renderHistoryTable();
+            updateDashboardData();
+            switchTab('dashboard');
+            showToast('บันทึกผลการตรวจประเมินเรียบร้อยแล้ว');
+        }
+
+        function updateDashboardData() {
+            const weekFilter = document.getElementById('weekFilter');
+            const lastUpdatedText = document.getElementById('lastUpdatedText');
+
+            if (historyData.length === 0) {
+                if (lastUpdatedText) lastUpdatedText.innerText = "ยังไม่มีข้อมูลการประเมินที่บันทึกไว้ในระบบ";
+                document.getElementById('kpiOverall').innerText = "-";
+                document.getElementById('kpiQuality').innerText = "-";
+                document.getElementById('kpiService').innerText = "-";
+                document.getElementById('kpiClean').innerText = "-";
+
+                document.getElementById('kpiOverallBar').style.width = "0%";
+                document.getElementById('kpiQualityBar').style.width = "0%";
+                document.getElementById('kpiServiceBar').style.width = "0%";
+                document.getElementById('kpiCleanBar').style.width = "0%";
+
+                document.getElementById('overallGrade').innerText = "-";
+                document.getElementById('overallGrade').className = "px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold whitespace-nowrap";
+
+                renderActionItems([]);
+
+                if (radarChartInstance) {
+                    radarChartInstance.data.datasets[0].data = [0, 0, 0, 0, 0, 0, 0];
+                    radarChartInstance.update();
+                }
+                return;
+            }
+
+            if (weekFilter) {
+                weekFilter.innerHTML = historyData.map((row, idx) => `
+                    <option value="${idx}">สัปดาห์ที่ ${row.week} (${row.branch}) - ${row.total}%</option>
+                `).join('');
+            }
+
+            const selectedIdx = parseInt(weekFilter?.value || '0');
+            const selectedRow = historyData[selectedIdx] || historyData[0];
+
+            if (lastUpdatedText && selectedRow) {
+                lastUpdatedText.innerText = `ข้อมูลอัปเดตล่าสุด: สัปดาห์ที่ ${selectedRow.week} (ผู้ประเมิน: ${selectedRow.auditor})`;
+            }
+
+            if (selectedRow) {
+                document.getElementById('kpiOverall').innerText = `${selectedRow.total.toFixed(1)}%`;
+                document.getElementById('kpiQuality').innerText = `${selectedRow.qScore.toFixed(1)}%`;
+                document.getElementById('kpiService').innerText = `${selectedRow.sScore.toFixed(1)}%`;
+                document.getElementById('kpiClean').innerText = `${selectedRow.cScore.toFixed(1)}%`;
+
+                document.getElementById('kpiOverallBar').style.width = `${selectedRow.total}%`;
+                document.getElementById('kpiQualityBar').style.width = `${selectedRow.qScore}%`;
+                document.getElementById('kpiServiceBar').style.width = `${selectedRow.sScore}%`;
+                document.getElementById('kpiCleanBar').style.width = `${selectedRow.cScore}%`;
+
+                const grade = document.getElementById('overallGrade');
+                if (grade) {
+                    if (selectedRow.total >= 90) {
+                        grade.innerText = 'Grade A';
+                        grade.className = 'px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-bold whitespace-nowrap';
+                    } else if (selectedRow.total >= 80) {
+                        grade.innerText = 'Grade B';
+                        grade.className = 'px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold whitespace-nowrap';
+                    } else {
+                        grade.innerText = 'Grade C';
+                        grade.className = 'px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded text-[10px] font-bold whitespace-nowrap';
+                    }
+                }
+
+                renderActionItems(selectedRow.failedItems || [], selectedRow.id);
+            }
+
+            if (lineChartInstance && historyData.length > 0) {
+                const recentHistory = [...historyData].reverse();
+                lineChartInstance.data.labels = recentHistory.map(h => `Week ${h.week}`);
+                lineChartInstance.data.datasets[0].data = recentHistory.map(h => h.qScore);
+                lineChartInstance.data.datasets[1].data = recentHistory.map(h => h.sScore);
+                lineChartInstance.data.datasets[2].data = recentHistory.map(h => h.cScore);
+                lineChartInstance.update();
+            }
+        }
+
+        function renderActionItems(failedItems, auditRecordId) {
+            const container = document.getElementById('actionItemsContainer');
+            const badge = document.getElementById('actionItemsCountBadge');
+
+            if (!container) return;
+
+            if (!failedItems || failedItems.length === 0) {
+                container.innerHTML = `
+                    <div class="p-8 text-center text-xs text-slate-400">
+                        <i class="fa-solid fa-circle-check text-2xl text-emerald-500 mb-2 block"></i>
+                        ผ่านเกณฑ์การประเมินทุกรายการ ไม่พบข้อตกค้าง
+                    </div>
+                `;
+                if (badge) {
+                    badge.innerText = 'ไม่มีข้อตกค้าง';
+                    badge.className = 'bg-emerald-100 text-emerald-700 font-bold text-xs px-2.5 py-1 rounded-full whitespace-nowrap';
+                }
+                return;
+            }
+
+            if (badge) {
+                badge.innerText = `${failedItems.length} หัวข้อที่ต้องแก้ไข`;
+                badge.className = 'bg-rose-100 text-rose-700 font-bold text-xs px-2.5 py-1 rounded-full whitespace-nowrap';
+            }
+
+            container.innerHTML = failedItems.map(item => `
+                <div class="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start gap-3 hover:bg-slate-50 transition">
+                    <div class="space-y-1.5 min-w-0">
+                        <div class="flex items-center space-x-2">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold text-white shrink-0 ${item.qscPillar === 'Q' ? 'bg-blue-600' : item.qscPillar === 'S' ? 'bg-emerald-600' : 'bg-amber-600'}">
+                                ${item.qscPillar}
+                            </span>
+                            <span class="text-xs font-bold text-slate-500 truncate">${item.category}</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.score === 0 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}">
+                                ${item.score === 0 ? 'ไม่ผ่าน (0%)' : 'บางส่วน (50%)'}
+                            </span>
+                        </div>
+                        <h4 class="text-xs sm:text-sm font-bold text-slate-900 leading-snug">${item.title}</h4>
+                        ${item.note ? `<p class="text-xs text-slate-600 italic"><i class="fa-solid fa-comment-dots mr-1 text-slate-400"></i>ข้อเสนอแนะ: "${item.note}"</p>` : ''}
+                        
+                        ${item.actionPlan ? `
+                            <div class="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1 text-emerald-900">
+                                <p class="font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> มีแผนแก้ไข (CAPA Plan):</p>
+                                <p><strong>แก้ไข:</strong> ${item.actionPlan.action}</p>
+                                <p><strong>ป้องกัน:</strong> ${item.actionPlan.prevention}</p>
+                                <p class="text-[10px] text-emerald-700"><strong>ผู้รับผิดชอบ:</strong> ${item.actionPlan.owner} | <strong>กำหนดเสร็จ:</strong> ${item.actionPlan.dueDate}</p>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="shrink-0 w-full sm:w-auto text-right">
+                        <button onclick="openActionModal('${auditRecordId}', '${item.id}')" class="w-full sm:w-auto text-xs px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-clipboard-check"></i>
+                            <span>${item.actionPlan ? 'แก้ไขแผน CAPA' : 'วางแผนแก้ไข CAPA'}</span>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        let currentCapaAuditId = null;
+        let currentCapaItemId = null;
+
+        function openActionModal(auditId, itemId) {
+            currentCapaAuditId = auditId;
+            currentCapaItemId = itemId;
+
+            const record = historyData.find(r => r.id === auditId);
+            if (!record) return;
+
+            const item = record.failedItems.find(i => i.id === itemId);
+            if (!item) return;
+
+            document.getElementById('actionItemId').value = itemId;
+            document.getElementById('actionItemTitle').innerText = item.title;
+            document.getElementById('actionItemAuditorNote').innerText = item.note ? `ข้อเสนอแนะออดิเตอร์: "${item.note}"` : 'ไม่มีข้อเสนอแนะ';
+
+            if (item.actionPlan) {
+                document.getElementById('capaAction').value = item.actionPlan.action || '';
+                document.getElementById('capaPrevention').value = item.actionPlan.prevention || '';
+                document.getElementById('capaOwner').value = item.actionPlan.owner || '';
+                document.getElementById('capaDueDate').value = item.actionPlan.dueDate || '';
+            } else {
+                document.getElementById('capaAction').value = '';
+                document.getElementById('capaPrevention').value = '';
+                document.getElementById('capaOwner').value = currentUser ? currentUser.name : '';
+                document.getElementById('capaDueDate').value = '';
+            }
+
+            document.getElementById('actionModal').classList.remove('hidden');
+        }
+
+        function closeActionModal() {
+            document.getElementById('actionModal').classList.add('hidden');
+        }
+
+        function handleCapaImageUpload(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentCapaImage = e.target.result;
+                    document.getElementById('capaImagePreview').src = e.target.result;
+                    document.getElementById('capaImagePreviewBox').classList.remove('hidden');
+                    document.getElementById('capaImageName').innerText = input.files[0].name;
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function removeCapaImage() {
+            currentCapaImage = null;
+            document.getElementById('capaImagePreviewBox').classList.add('hidden');
+            document.getElementById('capaImageName').innerText = 'ยังไม่ได้เลือกรูป';
+        }
+
+        function saveActionPlan(e) {
+            e.preventDefault();
+            const record = historyData.find(r => r.id === currentCapaAuditId);
+            if (!record) return;
+
+            const item = record.failedItems.find(i => i.id === currentCapaItemId);
+            if (!item) return;
+
+            item.actionPlan = {
+                action: document.getElementById('capaAction').value,
+                prevention: document.getElementById('capaPrevention').value,
+                owner: document.getElementById('capaOwner').value,
+                dueDate: document.getElementById('capaDueDate').value,
+                image: currentCapaImage
+            };
+
+            closeActionModal();
+            updateDashboardData();
+            showToast('บันทึกแผนติดตามแก้ไขข้อบกพร่อง (CAPA) เรียบร้อย');
+        }
+
+        function renderHistoryTable() {
+            const tbody = document.getElementById('historyTableBody');
+            if (!tbody) return;
+
+            if (historyData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="p-8 text-center text-slate-400">
+                            <i class="fa-solid fa-folder-open text-2xl mb-2 block text-slate-300"></i>
+                            ยังไม่มีข้อมูลประวัติการตรวจประเมิน
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = historyData.map((row, idx) => `
+                <tr class="hover:bg-slate-50/80 transition">
+                    <td class="p-2.5 sm:p-3 font-bold text-slate-800 whitespace-nowrap">สัปดาห์ที่ ${row.week}</td>
+                    <td class="p-2.5 sm:p-3 whitespace-nowrap">${row.branch}</td>
+                    <td class="p-2.5 sm:p-3 text-slate-600 whitespace-nowrap">${row.auditor}</td>
+                    <td class="p-2.5 sm:p-3 text-center text-blue-600 font-semibold whitespace-nowrap">${row.qScore}%</td>
+                    <td class="p-2.5 sm:p-3 text-center text-emerald-600 font-semibold whitespace-nowrap">${row.sScore}%</td>
+                    <td class="p-2.5 sm:p-3 text-center text-amber-600 font-semibold whitespace-nowrap">${row.cScore}%</td>
+                    <td class="p-2.5 sm:p-3 text-center font-bold text-slate-900 whitespace-nowrap">${row.total}%</td>
+                    <td class="p-2.5 sm:p-3 text-center whitespace-nowrap">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold ${row.total >= 85 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+                            ${row.status}
+                        </span>
+                    </td>
+                    <td class="p-2.5 sm:p-3 text-right whitespace-nowrap">
+                        <button onclick="viewHistoryDetail(${idx})" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2 py-1 rounded-lg transition">
+                            <i class="fa-solid fa-eye mr-1"></i>ดูผล
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function viewHistoryDetail(idx) {
+            const record = historyData[idx];
+            if (!record) return;
+
+            document.getElementById('detailModalTitle').innerText = `ผลประเมินสัปดาห์ที่ ${record.week} (${record.branch})`;
+            document.getElementById('detailModalSubtitle').innerText = `ผู้ประเมิน: ${record.auditor} | วันที่: ${record.date}`;
+            document.getElementById('detailTotalScore').innerText = `${record.total}%`;
+            document.getElementById('detailQScore').innerText = `${record.qScore}%`;
+            document.getElementById('detailSScore').innerText = `${record.sScore}%`;
+            document.getElementById('detailCScore').innerText = `${record.cScore}%`;
+
+            const container = document.getElementById('detailModalItemsList');
+            if (record.failedItems && record.failedItems.length > 0) {
+                container.innerHTML = record.failedItems.map(i => `
+                    <div class="p-2.5 bg-slate-50 border rounded-xl text-xs space-y-1">
+                        <div class="flex justify-between font-bold text-slate-800">
+                            <span>${i.title}</span>
+                            <span class="text-rose-600">${i.score}%</span>
+                        </div>
+                        <p class="text-slate-500">${i.category} (${i.qscPillar})</p>
+                        ${i.note ? `<p class="text-slate-600 italic">ข้อเสนอแนะ: "${i.note}"</p>` : ''}
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = `<p class="text-xs text-emerald-600 font-bold p-4 text-center">ผ่านเกณฑ์การประเมิน 100% ทุกรายการ</p>`;
+            }
+
+            document.getElementById('auditDetailModal').classList.remove('hidden');
+        }
+
+        function closeAuditDetailModal() {
+            document.getElementById('auditDetailModal').classList.add('hidden');
+        }
+
+        function exportHistoryCSV() {
+            if (historyData.length === 0) {
+                alert('ยังไม่มีข้อมูลสำหรับส่งออก');
+                return;
+            }
+            let csvStr = "\uFEFFสัปดาห์,สาขา,ผู้ประเมิน,Quality(%),Service(%),Cleanliness(%),คะแนนรวม(%),สถานะ\n";
+            historyData.forEach(row => {
+                csvStr += `"${row.week}","${row.branch}","${row.auditor}",${row.qScore},${row.sScore},${row.cScore},${row.total},"${row.status}"\n`;
+            });
+            const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `xBloom_QSC_Audit_Report_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            showToast('ดาวน์โหลดไฟล์ CSV เรียบร้อยแล้ว');
+        }
+
+        function renderSettingsList() {
+            const container = document.getElementById('criteriaManagementList');
+            if (!container) return;
+
+            const categories = [
+                'Bar Station',
+                'Call Order & Service Station',
+                'เครื่อง xBloom Studio',
+                'กาแฟและวัตถุดิบ',
+                'ความสะอาดและความปลอดภัย',
+                'Environment Station',
+                'Administration'
+            ];
+
+            container.innerHTML = categories.map(cat => {
+                const items = checklistState.filter(i => i.category === cat);
+                if (items.length === 0) return '';
+
+                return `
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+                        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+                            <h3 class="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-folder text-blue-600"></i>
+                                <span>${cat}</span>
+                            </h3>
+                            <span class="text-xs font-semibold text-slate-500">${items.length} รายการ</span>
+                        </div>
+                        <div class="space-y-2">
+                            ${items.map(item => `
+                                <div class="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-start gap-2 shadow-sm">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${item.qscPillar === 'Q' ? 'bg-blue-600' : item.qscPillar === 'S' ? 'bg-emerald-600' : 'bg-amber-600'}">
+                                                ${item.qscPillar}
+                                            </span>
+                                            <p class="font-bold text-slate-800 text-xs truncate">${item.title}</p>
+                                        </div>
+                                        <p class="text-[11px] text-slate-500 mt-0.5 truncate">${item.desc || '-'}</p>
+                                    </div>
+                                    <div class="flex items-center space-x-1 shrink-0">
+                                        <button onclick="openEditItemModal('${item.id}')" class="text-slate-400 hover:text-blue-600 p-1 transition" title="แก้ไขข้อความ">
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
+                                        <button onclick="deleteCriterion('${item.id}')" class="text-slate-400 hover:text-rose-600 p-1 transition" title="ลบรายการ">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function openAddItemModal() {
+            document.getElementById('modalTitle').value = '';
+            document.getElementById('modalDesc').value = '';
+            document.getElementById('addItemModal').classList.remove('hidden');
+        }
+
+        function closeAddItemModal() {
+            document.getElementById('addItemModal').classList.add('hidden');
+        }
+
+        function handleCreateCriterion(e) {
+            e.preventDefault();
+            const cat = document.getElementById('modalCategory').value;
+            const pillar = document.getElementById('modalPillar').value;
+            const title = document.getElementById('modalTitle').value.trim();
+            const desc = document.getElementById('modalDesc').value.trim();
+
+            const newItem = {
+                id: 'item_' + Date.now(),
+                category: cat,
+                qscPillar: pillar,
+                title: title,
+                desc: desc
+            };
+
+            checklistState.push(newItem);
+            closeAddItemModal();
+            renderSettingsList();
+            renderAuditForm();
+            showToast('เพิ่มหัวข้อประเมินเรียบร้อยแล้ว');
+        }
+
+        function openEditItemModal(id) {
+            const item = checklistState.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('editModalItemId').value = item.id;
+            document.getElementById('editModalCategory').value = item.category;
+            document.getElementById('editModalPillar').value = item.qscPillar;
+            document.getElementById('editModalTitle').value = item.title;
+            document.getElementById('editModalDesc').value = item.desc || '';
+
+            document.getElementById('editItemModal').classList.remove('hidden');
+        }
+
+        function closeEditItemModal() {
+            document.getElementById('editItemModal').classList.add('hidden');
+        }
+
+        function handleEditCriterion(e) {
+            e.preventDefault();
+            const id = document.getElementById('editModalItemId').value;
+            const item = checklistState.find(i => i.id === id);
+            if (!item) return;
+
+            item.category = document.getElementById('editModalCategory').value;
+            item.qscPillar = document.getElementById('editModalPillar').value;
+            item.title = document.getElementById('editModalTitle').value.trim();
+            item.desc = document.getElementById('editModalDesc').value.trim();
+
+            closeEditItemModal();
+            renderSettingsList();
+            renderAuditForm();
+            showToast('แก้ไขข้อมูลเกณฑ์ประเมินเรียบร้อยแล้ว');
+        }
+
+        function deleteCriterion(id) {
+            if (confirm('คุณต้องการลบข้อประเมินนี้ใช่หรือไม่?')) {
+                checklistState = checklistState.filter(i => i.id !== id);
+                renderSettingsList();
+                renderAuditForm();
+                showToast('ลบข้อประเมินเรียบร้อยแล้ว');
+            }
+        }
+
+        function initCharts() {
+            // Line Chart
+            const ctxLine = document.getElementById('weeklyTrendChart')?.getContext('2d');
+            if (ctxLine) {
+                lineChartInstance = new Chart(ctxLine, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            { label: 'Quality', data: [], borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', tension: 0.3, fill: true },
+                            { label: 'Service', data: [], borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.1)', tension: 0.3, fill: true },
+                            { label: 'Cleanliness', data: [], borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,0.1)', tension: 0.3, fill: true }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { min: 0, max: 100 } }
+                    }
+                });
+            }
+
+            // Radar Chart
+            const ctxRadar = document.getElementById('categoryRadarChart')?.getContext('2d');
+            if (ctxRadar) {
+                radarChartInstance = new Chart(ctxRadar, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Bar', 'Call&Service', 'xBloom', 'วัตถุดิบ', 'ความสะอาด', 'Environment', 'Admin'],
+                        datasets: [{
+                            label: 'Station Score',
+                            data: [0, 0, 0, 0, 0, 0, 0],
+                            backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                            borderColor: '#2563eb',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { r: { min: 0, max: 100 } }
+                    }
+                });
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMessage');
+            if (!toast || !toastMsg) return;
+
+            toastMsg.innerText = msg;
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-24', 'opacity-0');
+                toast.classList.remove('translate-y-0', 'opacity-100');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

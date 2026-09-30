@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>xBloom Expense App</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Prompt', sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* สไตล์สำหรับ Scrollbar ของ Dropdown */
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <!-- Navbar -->
+  <nav class="bg-emerald-600 text-white shadow-md">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <span class="font-bold text-xl tracking-wide">xBloom Expense</span>
+      </div>
+      
+      <div class="flex items-center space-x-3">
+        <!-- User Switcher -->
+        <div class="flex items-center bg-emerald-700/80 hover:bg-emerald-700 rounded-lg px-3 py-1.5 text-sm transition-colors border border-emerald-500/50">
+          <i data-lucide="user" class="w-4 h-4 mr-2"></i>
+          <select id="user-selector" onchange="switchUser(this.value)" class="bg-transparent text-white outline-none font-medium cursor-pointer appearance-none w-32 sm:w-auto">
+            <option class="text-slate-800" value="Toon">🧑‍💻 Toon (Admin All)</option>
+            <option class="text-slate-800" value="Pear">👩‍💼 Pear (E-commerce)</option>
+            <option class="text-slate-800" value="Nat">👨‍💼 Nat (Subscription)</option>
+            <option class="text-slate-800" value="Aoey">👩‍💻 Aoey (B2B)</option>
+            <option class="text-slate-800" value="DOM">👨‍🔧 DOM (Store)</option>
+          </select>
+          <i data-lucide="chevron-down" class="w-3 h-3 ml-1 opacity-70"></i>
+        </div>
+
+        <button 
+          onclick="openModal()"
+          class="bg-emerald-500 hover:bg-emerald-400 text-white px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors flex items-center text-sm shadow-sm"
+        >
+          <i data-lucide="plus" class="w-4 h-4 sm:mr-1"></i> <span class="hidden sm:inline">เพิ่มรายการ</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    
+    <!-- Tabs -->
+    <div class="flex overflow-x-auto space-x-1 bg-slate-200/50 p-1 rounded-xl w-full sm:w-fit mb-8 border border-slate-200 no-scrollbar">
+      <button 
+        id="tab-dashboard" onclick="setActiveTab('dashboard')"
+        class="flex-shrink-0 flex items-center px-4 sm:px-5 py-2.5 rounded-lg text-sm font-medium transition-colors bg-white text-emerald-700 shadow-sm"
+      >
+        <i data-lucide="pie-chart" class="w-4 h-4 mr-2"></i> ภาพรวม
+      </button>
+      <button 
+        id="tab-list" onclick="setActiveTab('list')"
+        class="flex-shrink-0 flex items-center px-4 sm:px-5 py-2.5 rounded-lg text-sm font-medium transition-colors text-slate-600 hover:text-slate-900"
+      >
+        <i data-lucide="list" class="w-4 h-4 mr-2"></i> รายการทั้งหมด
+      </button>
+      <button 
+        id="tab-logs" onclick="setActiveTab('logs')"
+        class="flex-shrink-0 flex items-center px-4 sm:px-5 py-2.5 rounded-lg text-sm font-medium transition-colors text-slate-600 hover:text-slate-900"
+      >
+        <i data-lucide="history" class="w-4 h-4 mr-2"></i> ประวัติการแก้ไข (Log)
+      </button>
+    </div>
+
+    <!-- Dynamic Content Container -->
+    <div id="app-content"></div>
+
+  </main>
+
+  <!-- Expense Modal (Create/Edit) -->
+  <div id="modal-container" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] transform scale-95 transition-transform duration-300" id="modal-box">
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
+        <h2 id="modal-title" class="text-xl font-bold text-slate-800 flex items-center">
+          <i data-lucide="plus" class="w-6 h-6 mr-2 text-emerald-600" id="modal-icon"></i> บันทึกค่าใช้จ่ายใหม่
+        </h2>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      
+      <div class="p-6 overflow-y-auto no-scrollbar">
+        <form id="expenseForm" onsubmit="handleSubmit(event)" class="space-y-5">
+          
+          <!-- Team Selection -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+              <i data-lucide="briefcase" class="w-4 h-4 mr-1.5 text-slate-400"></i> ทีม (Team) 
+              <span id="team-restriction-note" class="ml-2 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded hidden">คุณมีสิทธิ์เฉพาะบางทีม</span>
+            </label>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2" id="team-buttons-container">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- Name, Vendor & Desc -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+                <i data-lucide="file-text" class="w-4 h-4 mr-1.5 text-slate-400"></i> ชื่อรายการ
+              </label>
+              <input required type="text" id="form-name" placeholder="เช่น ค่าโฆษณา, ค่าเช่า..." class="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 outline-none transition-shadow" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+                <i data-lucide="store" class="w-4 h-4 mr-1.5 text-slate-400"></i> ร้านค้า/บริษัท (Vendor)
+              </label>
+              <input type="text" id="form-vendor" list="vendor-options" placeholder="พิมพ์ชื่อใหม่ หรือเลือกจากรายการ..." class="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 outline-none transition-shadow" autocomplete="off" />
+              <datalist id="vendor-options"></datalist>
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-slate-700 mb-1">รายละเอียดเพิ่มเติม</label>
+              <textarea id="form-description" rows="2" class="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 outline-none transition-shadow" placeholder="อธิบายรายละเอียดการใช้จ่าย..."></textarea>
+            </div>
+          </div>
+
+          <!-- Period -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+              <i data-lucide="calendar" class="w-4 h-4 mr-1.5 text-slate-400"></i> ช่วงเวลา (Period)
+            </label>
+            <div class="flex items-center space-x-2">
+              <input required type="date" id="form-periodStart" class="flex-1 bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 outline-none" />
+              <span class="text-slate-500 text-sm">ถึง</span>
+              <input required type="date" id="form-periodEnd" class="flex-1 bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 outline-none" />
+            </div>
+          </div>
+
+          <!-- Amount, Payment Method & Status -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2 border-t border-slate-100">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+                <i data-lucide="dollar-sign" class="w-4 h-4 mr-1.5 text-slate-400"></i> จำนวนเงิน (บาท) / ยอดรวม
+              </label>
+              <input required type="number" id="form-amount" min="0" step="0.01" placeholder="0.00" class="w-full bg-white border border-slate-300 text-slate-900 text-lg rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 outline-none transition-shadow" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+                <i data-lucide="credit-card" class="w-4 h-4 mr-1.5 text-slate-400"></i> วิธีการชำระเงิน
+              </label>
+              <select id="form-paymentMethod" class="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-3 outline-none"></select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+                <i data-lucide="info" class="w-4 h-4 mr-1.5 text-slate-400"></i> สถานะ (Status)
+              </label>
+              <select id="form-status" class="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-3 outline-none"></select>
+            </div>
+          </div>
+
+          <!-- Installment Options -->
+          <div class="pt-1 border-t border-slate-100">
+            <label class="flex items-center cursor-pointer text-sm font-medium text-slate-700 w-fit">
+                <input type="checkbox" id="form-isInstallment" onchange="toggleInstallmentFields()" class="w-4 h-4 text-indigo-600 bg-slate-100 border-slate-300 rounded focus:ring-indigo-500 focus:ring-2 cursor-pointer transition-all mr-2">
+                เป็นการแบ่งชำระ (Installment / Amortize)
+            </label>
+            <div id="installment-fields" class="grid grid-cols-1 md:grid-cols-2 gap-5 mt-3 hidden bg-indigo-50/40 p-4 rounded-xl border border-indigo-100">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+                        <i data-lucide="layers" class="w-4 h-4 mr-1.5 text-indigo-400"></i> จำนวนงวดทั้งหมด (งวด)
+                    </label>
+                    <input type="number" id="form-installmentCount" min="1" step="1" value="1" class="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none transition-shadow" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1 flex items-center">
+                        <i data-lucide="check-circle" class="w-4 h-4 mr-1.5 text-indigo-400"></i> ชำระแล้ว (งวด)
+                    </label>
+                    <input type="number" id="form-paidInstallments" min="0" step="1" value="0" class="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none transition-shadow" />
+                </div>
+            </div>
+          </div>
+
+          <!-- File Attachments -->
+          <div class="pt-2 border-t border-slate-100">
+            <label class="block text-sm font-medium text-slate-700 mb-3 flex items-center">
+              <i data-lucide="paperclip" class="w-4 h-4 mr-1.5 text-slate-400"></i> แนบไฟล์เอกสาร
+            </label>
+            <div class="space-y-3" id="attachments-container"></div>
+          </div>
+
+        </form>
+      </div>
+      
+      <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3 sticky bottom-0">
+        <button type="button" onclick="closeModal()" class="px-5 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:ring-4 focus:outline-none transition">ยกเลิก</button>
+        <button type="submit" form="expenseForm" id="submit-btn" class="px-5 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 focus:ring-4 focus:outline-none focus:ring-emerald-300 transition shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center">บันทึกข้อมูล</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Modal (Read-only Popup) -->
+  <div id="detail-modal-container" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col transform scale-95 transition-transform duration-300" id="detail-modal-box">
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <h2 class="text-lg font-bold text-slate-800 flex items-center">
+          <i data-lucide="file-search" class="w-5 h-5 mr-2 text-emerald-600"></i> รายละเอียดค่าใช้จ่าย
+        </h2>
+        <button onclick="closeDetailModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto max-h-[85vh] no-scrollbar" id="detail-modal-content">
+        <!-- Populated by JS -->
+      </div>
+      <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+        <button type="button" onclick="closeDetailModal()" class="px-5 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:ring-4 focus:outline-none transition">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview Modal -->
+  <div id="preview-modal-container" class="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-[60] hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col transform scale-95 transition-transform duration-300" id="preview-modal-box">
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <h2 class="text-lg font-bold text-slate-800 flex items-center">
+          <i data-lucide="eye" class="w-5 h-5 mr-2 text-emerald-600"></i> <span id="preview-modal-title" class="truncate max-w-[250px] sm:max-w-md">ตัวอย่างเอกสาร</span>
+        </h2>
+        <button onclick="closePreviewModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto max-h-[80vh] flex justify-center items-center bg-slate-100/50" id="preview-modal-content">
+        <!-- Content injected via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Dialog Modal (Alert/Confirm/Prompt) -->
+  <div id="dialog-modal-container" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[70] hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col transform scale-95 transition-transform duration-300" id="dialog-modal-box">
+      <div class="p-6">
+        <div class="flex items-center justify-center w-12 h-12 rounded-full mb-4 mx-auto" id="dialog-icon-container">
+          <i data-lucide="alert-circle" class="w-6 h-6" id="dialog-icon"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-800 text-center mb-2" id="dialog-title">แจ้งเตือน</h3>
+        <div class="text-sm text-slate-500 text-center" id="dialog-message">ข้อความ</div>
+      </div>
+      <div class="px-6 py-4 bg-slate-50 flex justify-center space-x-3" id="dialog-buttons">
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+
+    // ----------------------------------------------------
+    // Firebase Setup 
+    // ----------------------------------------------------
+    let firebaseConfig;
+    if (typeof __firebase_config !== 'undefined') {
+      firebaseConfig = JSON.parse(__firebase_config);
+    } else {
+      firebaseConfig = {
+        apiKey: "AIzaSyCOYY7nMLFXL049RhKVQFdxAwYDArCO7dQ",
+        authDomain: "xbloom-expense.firebaseapp.com",
+        projectId: "xbloom-expense",
+        storageBucket: "xbloom-expense.firebasestorage.app",
+        messagingSenderId: "697295183556",
+        appId: "1:697295183556:web:a3230f94b56343d8007391",
+        measurementId: "G-P9PXP3V08G"
+      };
+    }
+    
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'xbloom-expense';
+
+    // --- Access Control & Users ---
+    const TEAMS = ['E-commerce', 'B2B', 'Subscription', 'Store'];
+    
+    const ROLE_PERMISSIONS = {
+      'Toon': ['E-commerce', 'B2B', 'Subscription', 'Store'],
+      'Pear': ['E-commerce'],
+      'Nat': ['Subscription'],
+      'Aoey': ['B2B'],
+      'DOM': ['Store']
+    };
+
+    let currentUser = 'Toon';
+
+    function canEditTeam(teamName) {
+      return ROLE_PERMISSIONS[currentUser].includes(teamName);
+    }
+
+    // --- State & Constants ---
+    const PAYMENT_METHODS = ['Invoice', 'บัตรเครดิต', 'ตัดจากยอดขาย'];
+    const ATTACHMENT_TYPES = ['Quotation', 'Invoice', 'Receipt/tax invoice'];
+    const STATUSES = ['รอชำระ', 'ชำระเรียบร้อย', 'ยังไม่ถึงกำหนด', 'ยกเลิก'];
+
+    let expenses = [];
+    let auditLogs = [];
+
+    let state = {
+      activeTab: 'dashboard',
+      selectedMonths: [],
+      isMonthDropdownOpen: false,
+      searchQuery: '',
+      editingId: null,
+      formData: {
+        team: '',
+        attachments: {}
+      },
+      listFilters: {
+        startDate: '',
+        endDate: '',
+        team: '',
+        status: '',
+        vendor: ''
+      }
+    };
+
+    // --- Auth & Data Fetching ---
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Authentication Error:", error);
+      }
+    };
+
+    initAuth();
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+
+      const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'expenses');
+      onSnapshot(expensesRef, (snapshot) => {
+        const fetchedExpenses = [];
+        snapshot.forEach((doc) => fetchedExpenses.push({ id: doc.id, ...doc.data() }));
+        
+        if (fetchedExpenses.length === 0) {
+            expenses = [];
+        } else {
+            expenses = fetchedExpenses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        }
+        renderApp();
+      }, (error) => console.error("Error fetching expenses:", error));
+
+      const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+      onSnapshot(logsRef, (snapshot) => {
+        const fetchedLogs = [];
+        snapshot.forEach((doc) => fetchedLogs.push({ id: doc.id, ...doc.data() }));
+        auditLogs = fetchedLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        renderApp();
+      }, (error) => console.error("Error fetching logs:", error));
+    });
+
+    // --- System Functions ---
+    async function addLog(action, targetName, details) {
+      const newLogId = Date.now().toString();
+      const logData = {
+        timestamp: new Date().toISOString(),
+        user: currentUser,
+        action: action,
+        target: targetName,
+        details: details
+      };
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', newLogId), logData);
+      } catch (error) {
+        console.error("Error adding log:", error);
+      }
+    }
+
+    function switchUser(userName) {
+      currentUser = userName;
+      renderApp();
+    }
+
+    function exportToCSV() {
+      const listToExport = getFilteredListExpenses();
+      
+      if (listToExport.length === 0) {
+        showAlertModal('ไม่สามารถส่งออกได้', 'ไม่มีข้อมูลสำหรับ Export ตามเงื่อนไขปัจจุบัน', true);
+        return;
+      }
+
+      const headers = ['วันที่บันทึก', 'ทีม', 'ชื่อรายการ', 'ร้านค้า/บริษัท (Vendor)', 'รายละเอียด', 'เริ่ม (Period)', 'สิ้นสุด (Period)', 'ช่องทางชำระ', 'สถานะ', 'จำนวนเงินรวม', 'แบ่งชำระ', 'จำนวนงวดทั้งหมด', 'ชำระแล้ว (งวด)'];
+      
+      const rows = listToExport.map(exp => [
+        exp.createdAt,
+        exp.team,
+        `"${(exp.name || '').replace(/"/g, '""')}"`, 
+        `"${(exp.vendor || '').replace(/"/g, '""')}"`, 
+        `"${(exp.description || '').replace(/"/g, '""')}"`,
+        exp.periodStart,
+        exp.periodEnd,
+        exp.paymentMethod,
+        exp.status,
+        exp.amount,
+        exp.isInstallment ? 'Yes' : 'No',
+        exp.isInstallment ? exp.installmentCount : '-',
+        exp.isInstallment ? exp.paidInstallments : '-'
+      ]);
+
+      const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const bom = '\uFEFF'; 
+      const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `xBloom_Expense_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      addLog('EXPORT', 'ระบบรายงาน', 'ดาวน์โหลดข้อมูลเป็นไฟล์ CSV');
+    }
+
+    // --- Formatters ---
+    const formatCurrency = (amount) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(amount);
+    const formatDate = (dateString) => {
+      if (!dateString) return '-';
+      const date = new Date(dateString);
+      return date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+    const formatDateTime = (isoString) => {
+      if (!isoString) return '-';
+      const date = new Date(isoString);
+      return date.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + date.toLocaleTimeString('th-TH', { hour: '2-digit', minute:'2-digit' });
+    };
+
+    const getStatusBadgeHTML = (status) => {
+      switch(status) {
+        case 'ชำระเรียบร้อย': return `<span class="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">ชำระเรียบร้อย</span>`;
+        case 'รอชำระ': return `<span class="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">รอชำระ</span>`;
+        case 'ยังไม่ถึงกำหนด': return `<span class="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">ยังไม่ถึงกำหนด</span>`;
+        case 'ยกเลิก': return `<span class="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium bg-red-50 text-red-700 border border-red-200 whitespace-nowrap">ยกเลิก</span>`;
+        default: return `<span class="inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">${status || '-'}</span>`;
+      }
+    };
+
+    // --- Helper Functions ---
+    const getAvailableMonths = () => {
+      const monthsSet = new Set();
+      expenses.forEach(exp => {
+        const startStr = exp.periodStart.substring(0, 7);
+        monthsSet.add(startStr);
+        
+        if (exp.isInstallment && exp.periodEnd) {
+           let [sY, sM] = startStr.split('-').map(Number);
+           let [eY, eM] = exp.periodEnd.substring(0, 7).split('-').map(Number);
+           
+           while (sY < eY || (sY === eY && sM <= eM)) {
+               monthsSet.add(`${sY}-${String(sM).padStart(2, '0')}`);
+               sM++;
+               if (sM > 12) { sM = 1; sY++; }
+           }
+        }
+      });
+      return [...monthsSet].sort().reverse();
+    };
+
+    const getFilteredExpenses = () => {
+      let filtered = expenses;
+      if (state.selectedMonths.length > 0) {
+        filtered = filtered.filter(exp => {
+          const expStartMonth = exp.periodStart.substring(0, 7);
+          const expEndMonth = exp.periodEnd.substring(0, 7);
+          
+          if (exp.isInstallment) {
+              return state.selectedMonths.some(m => m >= expStartMonth && m <= expEndMonth);
+          } else {
+              return state.selectedMonths.includes(expStartMonth);
+          }
+        });
+      }
+      if (state.searchQuery) {
+        const query = state.searchQuery.toLowerCase();
+        filtered = filtered.filter(exp => 
+          exp.name.toLowerCase().includes(query) || 
+          exp.team.toLowerCase().includes(query) || 
+          (exp.vendor && exp.vendor.toLowerCase().includes(query)) ||
+          (exp.description && exp.description.toLowerCase().includes(query))
+        );
+      }
+      return filtered;
+    };
+
+    const getFilteredListExpenses = () => {
+      let filtered = expenses;
+      if (state.listFilters.startDate) {
+        filtered = filtered.filter(exp => exp.periodStart >= state.listFilters.startDate);
+      }
+      if (state.listFilters.endDate) {
+        filtered = filtered.filter(exp => exp.periodStart <= state.listFilters.endDate);
+      }
+      if (state.listFilters.team) {
+        filtered = filtered.filter(exp => exp.team === state.listFilters.team);
+      }
+      if (state.listFilters.status) {
+        filtered = filtered.filter(exp => exp.status === state.listFilters.status);
+      }
+      if (state.listFilters.vendor) {
+        filtered = filtered.filter(exp => exp.vendor === state.listFilters.vendor);
+      }
+      return filtered;
+    };
+
+    function getDropdownDisplayText() {
+      let available = getAvailableMonths();
+      if (state.selectedMonths.length === 0 || state.selectedMonths.length === available.length) return 'ทุกเดือน';
+      if (state.selectedMonths.length === 1) return state.selectedMonths[0];
+      return `เลือก ${state.selectedMonths.length} เดือน`;
+    }
+
+    // --- Event Handlers ---
+    function toggleInstallmentFields() {
+        const isChecked = document.getElementById('form-isInstallment').checked;
+        const fields = document.getElementById('installment-fields');
+        if (isChecked) {
+            fields.classList.remove('hidden');
+        } else {
+            fields.classList.add('hidden');
+        }
+    }
+
+    function toggleMonthDropdown(event) {
+      if(event) event.stopPropagation();
+      state.isMonthDropdownOpen = !state.isMonthDropdownOpen;
+      renderApp();
+    }
+
+    function toggleAllMonths(event) {
+      if(event) event.stopPropagation();
+      if (state.selectedMonths.length === 0) {
+          let available = getAvailableMonths();
+          state.selectedMonths = available.length > 0 ? [available[0]] : [];
+      } else {
+          state.selectedMonths = [];
+      }
+      renderApp();
+    }
+
+    function toggleMonthSelection(event, month) {
+      if(event) event.stopPropagation();
+      let available = getAvailableMonths();
+      
+      if (state.selectedMonths.length === 0) {
+          state.selectedMonths = available.filter(m => m !== month);
+      } else {
+          if (state.selectedMonths.includes(month)) {
+              state.selectedMonths = state.selectedMonths.filter(m => m !== month);
+          } else {
+              state.selectedMonths.push(month);
+          }
+          if (state.selectedMonths.length === available.length) {
+              state.selectedMonths = [];
+          }
+      }
+      renderApp();
+    }
+
+    function handleListFilterChange(field, value) {
+      state.listFilters[field] = value;
+      renderApp();
+    }
+
+    function clearListFilters() {
+      state.listFilters = { startDate: '', endDate: '', team: '', status: '', vendor: '' };
+      renderApp();
+    }
+
+    // --- Render App ---
+    function renderApp() {
+      const contentDiv = document.getElementById('app-content');
+      if (state.activeTab === 'dashboard') {
+        contentDiv.innerHTML = getDashboardHTML();
+      } else if (state.activeTab === 'list') {
+        contentDiv.innerHTML = getListHTML();
+      } else {
+        contentDiv.innerHTML = getLogsHTML();
+      }
+      lucide.createIcons();
+    }
+
+    function setActiveTab(tab) {
+      state.activeTab = tab;
+      const tabs = ['dashboard', 'list', 'logs'];
+      tabs.forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        if(t === tab) {
+          el.className = "flex-shrink-0 flex items-center px-4 sm:px-5 py-2.5 rounded-lg text-sm font-medium transition-colors bg-white text-emerald-700 shadow-sm";
+        } else {
+          el.className = "flex-shrink-0 flex items-center px-4 sm:px-5 py-2.5 rounded-lg text-sm font-medium transition-colors text-slate-600 hover:text-slate-900";
+        }
+      });
+      renderApp();
+    }
+
+    function handleSearch(inputElement) {
+      state.searchQuery = inputElement.value;
+      renderApp();
+      const searchInput = document.getElementById('dashboard-search');
+      if (searchInput) {
+        searchInput.focus();
+        const len = searchInput.value.length;
+        searchInput.setSelectionRange(len, len);
+      }
+    }
+
+    // --- HTML Generators ---
+    function getDashboardHTML() {
+      const filtered = getFilteredExpenses();
+      const validExpenses = filtered.filter(exp => exp.status !== 'ยกเลิก');
+      
+      let totalAmount = 0;
+      let teamBreakdown = {};
+      TEAMS.forEach(team => teamBreakdown[team] = 0);
+      
+      let availableMonths = getAvailableMonths();
+      let isAllSelected = state.selectedMonths.length === 0 || state.selectedMonths.length === availableMonths.length;
+
+      validExpenses.forEach(exp => {
+          let amountToAdd = 0;
+          if (isAllSelected) {
+              amountToAdd = exp.amount; 
+          } else {
+              if (exp.isInstallment) {
+                  const expStartMonth = exp.periodStart.substring(0, 7);
+                  const expEndMonth = exp.periodEnd.substring(0, 7);
+                  const overlappingMonths = state.selectedMonths.filter(m => m >= expStartMonth && m <= expEndMonth).length;
+                  
+                  const monthlyAmount = exp.amount / exp.installmentCount;
+                  amountToAdd = monthlyAmount * overlappingMonths;
+              } else {
+                  amountToAdd = exp.amount;
+              }
+          }
+          
+          totalAmount += amountToAdd;
+          teamBreakdown[exp.team] += amountToAdd;
+      });
+
+      let monthsDropdownHTML = `
+        <div class="relative w-full sm:w-auto text-left" id="month-filter-container">
+          <button type="button" onclick="toggleMonthDropdown(event)" class="w-full sm:w-48 bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 flex items-center justify-between p-2.5 outline-none transition-shadow shadow-sm">
+            <span class="truncate pr-2 font-medium text-emerald-700">${getDropdownDisplayText()}</span>
+            <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${state.isMonthDropdownOpen ? 'rotate-180' : ''}"></i>
+          </button>
+          
+          <div id="month-dropdown-menu" class="${state.isMonthDropdownOpen ? '' : 'hidden'} absolute right-0 z-20 mt-2 w-full sm:w-56 origin-top-right rounded-xl bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none border border-slate-100 py-1">
+            <div class="p-2 space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
+              <label class="flex items-center space-x-3 p-2.5 hover:bg-emerald-50 rounded-lg cursor-pointer transition-colors select-none">
+                <input type="checkbox" onchange="toggleAllMonths(event)" ${isAllSelected ? 'checked' : ''} class="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer transition-all">
+                <span class="text-sm font-medium text-slate-800">เลือกทุกเดือน</span>
+              </label>
+              <hr class="border-slate-100 my-1">
+              ${availableMonths.map(m => `
+                <label class="flex items-center space-x-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors select-none">
+                  <input type="checkbox" onchange="toggleMonthSelection(event, '${m}')" ${state.selectedMonths.includes(m) || isAllSelected ? 'checked' : ''} class="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer transition-all">
+                  <span class="text-sm text-slate-700">${m}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+
+      let breakdownHTML = '';
+      TEAMS.forEach(team => {
+        const amount = teamBreakdown[team];
+        const percentage = totalAmount > 0 ? (amount / totalAmount) * 100 : 0;
+        breakdownHTML += `
+          <div>
+            <div class="flex justify-between text-sm mb-1">
+              <span class="font-medium text-slate-700">${team}</span>
+              <span class="text-slate-500">${formatCurrency(amount)} (${percentage.toFixed(1)}%)</span>
+            </div>
+            <div class="w-full bg-slate-100 rounded-full h-2.5">
+              <div class="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" style="width: ${percentage}%"></div>
+            </div>
+          </div>
+        `;
+      });
+
+      let recentRowsHTML = '';
+      const recent = filtered.slice(0, 5);
+      if(recent.length === 0) {
+        recentRowsHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-slate-400">ไม่มีข้อมูลตามเงื่อนไขที่เลือก</td></tr>`;
+      } else {
+        recent.forEach(exp => {
+          const isCancelled = exp.status === 'ยกเลิก';
+          
+          let amountHTML = '';
+          if (exp.isInstallment) {
+              const monthly = exp.amount / exp.installmentCount;
+              amountHTML = `
+                  <div class="text-right">
+                      <div class="font-semibold ${isCancelled ? 'text-slate-400' : 'text-slate-700'}">${formatCurrency(exp.amount)}</div>
+                      <div class="text-[10px] text-indigo-500 font-normal mt-0.5">แบ่งจ่าย ${formatCurrency(monthly)}/งวด</div>
+                  </div>
+              `;
+          } else {
+              amountHTML = `<span class="font-semibold ${isCancelled ? 'text-slate-400' : 'text-red-600'}">${formatCurrency(exp.amount)}</span>`;
+          }
+
+          recentRowsHTML += `
+            <tr class="bg-white border-b border-slate-50 hover:bg-slate-50/50">
+              <td class="px-6 py-4 font-medium text-slate-900">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">${exp.team}</span>
+              </td>
+              <td class="px-6 py-4">
+                <div class="${isCancelled ? 'line-through text-slate-400' : ''}">${exp.name}</div>
+                ${exp.vendor ? `<div class="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded w-fit mt-1.5 flex items-center"><i data-lucide="store" class="w-3 h-3 mr-1"></i>${exp.vendor}</div>` : ''}
+              </td>
+              <td class="px-6 py-4 text-slate-500 text-xs whitespace-nowrap">${formatDate(exp.periodStart)} - ${formatDate(exp.periodEnd)}</td>
+              <td class="px-6 py-4">${getStatusBadgeHTML(exp.status)}</td>
+              <td class="px-6 py-4 text-right">${amountHTML}</td>
+              <td class="px-6 py-4 text-center">
+                <button onclick="openDetailModal('${exp.id}')" class="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors shadow-sm bg-white border border-slate-200" title="ดูรายละเอียด">
+                  <i data-lucide="external-link" class="w-4 h-4"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        });
+      }
+
+      return `
+        <div class="space-y-6 animate-fade-in">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100 gap-4 relative">
+            <h2 class="text-lg font-semibold text-slate-700 whitespace-nowrap">สรุปยอดใช้จ่าย</h2>
+            <div class="flex flex-col sm:flex-row w-full sm:w-auto space-y-3 sm:space-y-0 sm:space-x-3">
+              <div class="relative w-full sm:w-64">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                <input type="text" id="dashboard-search" placeholder="ค้นหารายการ, ร้านค้า, ทีม..." value="${state.searchQuery || ''}" oninput="handleSearch(this)" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg pl-9 p-2.5 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-shadow shadow-sm">
+              </div>
+              ${monthsDropdownHTML}
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-emerald-600 text-white rounded-2xl p-6 shadow-md relative overflow-hidden">
+              <div class="relative z-10">
+                <p class="text-emerald-100 text-sm font-medium mb-1">ยอดใช้จ่ายรวม (ไม่รวมยกเลิก)</p>
+                <h3 class="text-3xl font-bold">${formatCurrency(totalAmount)}</h3>
+              </div>
+              <i data-lucide="dollar-sign" class="w-32 h-32 absolute -bottom-6 -right-6 text-emerald-500 opacity-50"></i>
+            </div>
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 md:col-span-2">
+              <h3 class="text-sm font-medium text-slate-500 mb-4">สัดส่วนค่าใช้จ่ายตามทีม</h3>
+              <div class="space-y-4">${breakdownHTML}</div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-8">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 class="font-semibold text-slate-700">รายการล่าสุดตามเงื่อนไขที่เลือก</h3>
+              <button onclick="setActiveTab('list')" class="text-sm text-emerald-600 hover:underline font-medium">ดูทั้งหมด</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm text-left">
+                <thead class="text-xs text-slate-500 bg-slate-50 uppercase border-b border-slate-200">
+                  <tr>
+                    <th class="px-6 py-3">ทีม</th>
+                    <th class="px-6 py-3">รายการ</th>
+                    <th class="px-6 py-3 whitespace-nowrap">ช่วงเวลา</th>
+                    <th class="px-6 py-3">สถานะ</th>
+                    <th class="px-6 py-3 text-right">จำนวนเงิน</th>
+                    <th class="px-6 py-3 text-center">รายละเอียด</th>
+                  </tr>
+                </thead>
+                <tbody>${recentRowsHTML}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function getListHTML() {
+      let rowsHTML = '';
+      const filteredList = getFilteredListExpenses();
+      const vendors = [...new Set(expenses.map(e => e.vendor).filter(v => v))].sort();
+      
+      if(filteredList.length === 0) {
+        rowsHTML = `<tr><td colspan="7" class="px-6 py-12 text-center text-slate-400">ไม่มีข้อมูลตามเงื่อนไขที่ค้นหา</td></tr>`;
+      } else {
+        filteredList.forEach(exp => {
+          const hasPermission = canEditTeam(exp.team);
+          let actionButtons = '';
+          if(hasPermission) {
+            actionButtons = `
+              <div class="flex justify-center space-x-1">
+                <button onclick="openModal('${exp.id}', true)" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="แก้ไขรายการ">
+                  <i data-lucide="edit" class="w-4 h-4"></i>
+                </button>
+                <button onclick="handleDuplicate('${exp.id}')" class="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors" title="คัดลอกรายการ">
+                  <i data-lucide="copy" class="w-4 h-4"></i>
+                </button>
+                <button onclick="handleDelete('${exp.id}')" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="ลบรายการ">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            `;
+          } else {
+            actionButtons = `
+              <div class="flex flex-col items-center justify-center text-[10px] text-slate-400">
+                <i data-lucide="lock" class="w-3 h-3 mb-1"></i>
+                <span>ไม่มีสิทธิ์</span>
+              </div>
+            `;
+          }
+
+          let amountHTML = '';
+          if (exp.isInstallment) {
+              const monthly = exp.amount / exp.installmentCount;
+              amountHTML = `
+                  <div class="text-right">
+                      <div class="font-semibold ${exp.status === 'ยกเลิก' ? 'text-slate-400' : 'text-slate-700'}">${formatCurrency(exp.amount)}</div>
+                      <div class="text-[10px] text-indigo-500 font-normal mt-0.5">แบ่งจ่าย ${formatCurrency(monthly)}/งวด</div>
+                  </div>
+              `;
+          } else {
+              amountHTML = `<span class="font-semibold ${exp.status === 'ยกเลิก' ? 'text-slate-400' : 'text-slate-700'}">${formatCurrency(exp.amount)}</span>`;
+          }
+
+          let statusHTML = getStatusBadgeHTML(exp.status);
+          if (exp.isInstallment) {
+              statusHTML += `
+                  <div class="mt-1.5 text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded inline-block whitespace-nowrap">
+                      ผ่อนแล้ว ${exp.paidInstallments}/${exp.installmentCount}
+                  </div>
+              `;
+          }
+
+          rowsHTML += `
+            <tr class="bg-white hover:bg-slate-50/80 transition-colors border-b border-slate-50">
+              <td class="px-6 py-4">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700">${exp.team}</span>
+              </td>
+              <td class="px-6 py-4 text-slate-700 whitespace-nowrap">
+                ${exp.vendor ? `<div class="flex items-center"><i data-lucide="store" class="w-3.5 h-3.5 mr-1.5 text-slate-400"></i>${exp.vendor}</div>` : `<span class="text-slate-400">-</span>`}
+              </td>
+              <td class="px-6 py-4">
+                <div class="font-medium ${exp.status === 'ยกเลิก' ? 'text-slate-400 line-through' : 'text-slate-800'}">${exp.name}</div>
+                <div class="text-xs text-slate-500 mt-1.5 line-clamp-1">${exp.description}</div>
+              </td>
+              <td class="px-6 py-4 text-slate-500 text-xs whitespace-nowrap">${formatDate(exp.periodStart)}<br/>ถึง ${formatDate(exp.periodEnd)}</td>
+              <td class="px-6 py-4">${statusHTML}</td>
+              <td class="px-6 py-4 text-right">${amountHTML}</td>
+              <td class="px-6 py-4 min-w-[100px]">${actionButtons}</td>
+            </tr>
+          `;
+        });
+      }
+
+      return `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in">
+          <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-700">รายการค่าใช้จ่ายทั้งหมด</h2>
+              <p class="text-sm text-slate-500 mt-1">ประวัติการบันทึกค่าใช้จ่ายของทุกทีม</p>
+            </div>
+            <button onclick="exportToCSV()" class="flex items-center justify-center px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors shadow-sm whitespace-nowrap">
+              <i data-lucide="download" class="w-4 h-4 mr-2"></i> Export to CSV
+            </button>
+          </div>
+          
+          <!-- Filter Bar -->
+          <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/30 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+             <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1.5">ตั้งแต่ (วันที่เริ่มต้น)</label>
+                <input type="date" value="${state.listFilters.startDate}" onchange="handleListFilterChange('startDate', this.value)" class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-shadow shadow-sm">
+             </div>
+             <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1.5">ถึง (วันที่สิ้นสุด)</label>
+                <input type="date" value="${state.listFilters.endDate}" onchange="handleListFilterChange('endDate', this.value)" class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-shadow shadow-sm">
+             </div>
+             <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1.5">ทีม (Team)</label>
+                <select onchange="handleListFilterChange('team', this.value)" class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-shadow shadow-sm">
+                   <option value="">ทุกทีม</option>
+                   ${TEAMS.map(t => `<option value="${t}" ${state.listFilters.team === t ? 'selected' : ''}>${t}</option>`).join('')}
+                </select>
+             </div>
+             <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1.5">ร้านค้า (Vendor)</label>
+                <select onchange="handleListFilterChange('vendor', this.value)" class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-shadow shadow-sm">
+                   <option value="">ทุกร้านค้า</option>
+                   ${vendors.map(v => `<option value="${v}" ${state.listFilters.vendor === v ? 'selected' : ''}>${v}</option>`).join('')}
+                </select>
+             </div>
+             <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1.5">สถานะ (Status)</label>
+                <select onchange="handleListFilterChange('status', this.value)" class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-shadow shadow-sm">
+                   <option value="">ทุกสถานะ</option>
+                   ${STATUSES.map(s => `<option value="${s}" ${state.listFilters.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+             </div>
+             <div class="flex items-end">
+                <button onclick="clearListFilters()" class="w-full py-2.5 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center justify-center shadow-sm">
+                   <i data-lucide="x-circle" class="w-4 h-4 mr-1.5 text-slate-400"></i> ล้างตัวกรอง
+                </button>
+             </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs text-slate-500 bg-slate-50 uppercase border-b border-slate-200">
+                <tr>
+                  <th class="px-6 py-4">ทีม</th>
+                  <th class="px-6 py-4 whitespace-nowrap">ร้านค้า/Vendor</th>
+                  <th class="px-6 py-4 min-w-[150px]">รายการ</th>
+                  <th class="px-6 py-4 whitespace-nowrap">ช่วงเวลา</th>
+                  <th class="px-6 py-4">สถานะ</th>
+                  <th class="px-6 py-4 text-right whitespace-nowrap">จำนวนเงิน</th>
+                  <th class="px-6 py-4 text-center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">${rowsHTML}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function getLogsHTML() {
+      let rowsHTML = '';
+      if(auditLogs.length === 0) {
+        rowsHTML = `<tr><td colspan="5" class="px-6 py-12 text-center text-slate-400">ยังไม่มีประวัติการทำงาน</td></tr>`;
+      } else {
+        auditLogs.forEach(log => {
+          let actionBadge = '';
+          switch(log.action) {
+            case 'CREATE': actionBadge = `<span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-xs font-medium border border-emerald-100">เพิ่มใหม่</span>`; break;
+            case 'EDIT': actionBadge = `<span class="text-blue-600 bg-blue-50 px-2 py-0.5 rounded text-xs font-medium border border-blue-100">แก้ไขข้อมูล</span>`; break;
+            case 'DELETE': actionBadge = `<span class="text-red-600 bg-red-50 px-2 py-0.5 rounded text-xs font-medium border border-red-100">ลบข้อมูล</span>`; break;
+            case 'EXPORT': actionBadge = `<span class="text-purple-600 bg-purple-50 px-2 py-0.5 rounded text-xs font-medium border border-purple-100">ส่งออกข้อมูล</span>`; break;
+          }
+
+          rowsHTML += `
+            <tr class="bg-white hover:bg-slate-50/80 transition-colors border-b border-slate-50">
+              <td class="px-6 py-4 text-slate-500 text-xs whitespace-nowrap">${formatDateTime(log.timestamp)}</td>
+              <td class="px-6 py-4 font-medium text-slate-700 flex items-center whitespace-nowrap">
+                <i data-lucide="user" class="w-3.5 h-3.5 mr-1.5 text-slate-400"></i> ${log.user}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">${actionBadge}</td>
+              <td class="px-6 py-4 font-medium text-slate-800">${log.target}</td>
+              <td class="px-6 py-4 text-slate-500 text-xs">${log.details}</td>
+            </tr>
+          `;
+        });
+      }
+
+      return `
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in">
+          <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
+            <h2 class="text-lg font-semibold text-slate-700">ประวัติการทำงานของระบบ (Audit Log)</h2>
+            <p class="text-sm text-slate-500 mt-1">ติดตามดูการ เพิ่ม, แก้ไข และลบข้อมูล โดยผู้ใช้งานต่างๆ</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs text-slate-500 bg-slate-50 uppercase border-b border-slate-200">
+                <tr>
+                  <th class="px-6 py-4 whitespace-nowrap">วัน-เวลา</th>
+                  <th class="px-6 py-4 whitespace-nowrap">ผู้ใช้งาน (User)</th>
+                  <th class="px-6 py-4 whitespace-nowrap">การกระทำ (Action)</th>
+                  <th class="px-6 py-4">รายการที่ได้รับผลกระทบ</th>
+                  <th class="px-6 py-4">รายละเอียด</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">${rowsHTML}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- Modal Handling ---
+    function renderVendorsList() {
+      const datalist = document.getElementById('vendor-options');
+      if (!datalist) return;
+      datalist.innerHTML = '';
+      
+      const vendors = [...new Set(expenses.map(e => e.vendor).filter(v => v))].sort();
+      vendors.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        datalist.appendChild(opt);
+      });
+    }
+
+    function openModal(id = null, isEdit = false) {
+      const pmSelect = document.getElementById('form-paymentMethod');
+      if (pmSelect.options.length === 0) {
+        PAYMENT_METHODS.forEach(pm => {
+          const opt = document.createElement('option');
+          opt.value = pm; opt.text = pm; pmSelect.appendChild(opt);
+        });
+      }
+      const statusSelect = document.getElementById('form-status');
+      if (statusSelect.options.length === 0) {
+        STATUSES.forEach(status => {
+          const opt = document.createElement('option');
+          opt.value = status; opt.text = status; statusSelect.appendChild(opt);
+        });
+      }
+
+      state.editingId = isEdit ? id : null;
+      const titleEl = document.getElementById('modal-title');
+
+      renderVendorsList();
+
+      if (isEdit && id) {
+        const exp = expenses.find(e => e.id === id);
+        if(!exp) return;
+        state.formData = { team: exp.team, attachments: { ...exp.attachments } };
+        
+        setTimeout(() => {
+          document.getElementById('form-name').value = exp.name;
+          document.getElementById('form-vendor').value = exp.vendor || '';
+          document.getElementById('form-description').value = exp.description || '';
+          document.getElementById('form-periodStart').value = exp.periodStart;
+          document.getElementById('form-periodEnd').value = exp.periodEnd;
+          document.getElementById('form-amount').value = exp.amount;
+          document.getElementById('form-paymentMethod').value = exp.paymentMethod;
+          document.getElementById('form-status').value = exp.status;
+          
+          document.getElementById('form-isInstallment').checked = exp.isInstallment || false;
+          document.getElementById('form-installmentCount').value = exp.installmentCount || 1;
+          document.getElementById('form-paidInstallments').value = exp.paidInstallments || 0;
+          toggleInstallmentFields();
+        }, 50);
+
+        titleEl.innerHTML = `<i data-lucide="edit" class="w-6 h-6 mr-2 text-blue-600"></i> แก้ไขข้อมูลค่าใช้จ่าย`;
+      } else {
+        const allowedTeams = ROLE_PERMISSIONS[currentUser];
+        state.formData = { 
+          team: allowedTeams.includes(state.formData.team) ? state.formData.team : allowedTeams[0], 
+          attachments: {} 
+        };
+        setTimeout(resetFormFields, 50);
+        titleEl.innerHTML = `<i data-lucide="plus" class="w-6 h-6 mr-2 text-emerald-600"></i> บันทึกค่าใช้จ่ายใหม่`;
+      }
+
+      renderFormState();
+      
+      const modal = document.getElementById('modal-container');
+      const modalBox = document.getElementById('modal-box');
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        modalBox.classList.remove('scale-95');
+        modalBox.classList.add('scale-100');
+        lucide.createIcons();
+      }, 10);
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('modal-container');
+      const modalBox = document.getElementById('modal-box');
+      modal.classList.add('opacity-0');
+      modalBox.classList.remove('scale-100');
+      modalBox.classList.add('scale-95');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+        state.editingId = null;
+      }, 300);
+    }
+
+    function resetFormFields() {
+      document.getElementById('form-name').value = '';
+      document.getElementById('form-vendor').value = '';
+      document.getElementById('form-description').value = '';
+      document.getElementById('form-periodStart').value = '';
+      document.getElementById('form-periodEnd').value = '';
+      document.getElementById('form-amount').value = '';
+      document.getElementById('form-paymentMethod').value = PAYMENT_METHODS[0];
+      document.getElementById('form-status').value = STATUSES[0];
+      
+      document.getElementById('form-isInstallment').checked = false;
+      document.getElementById('form-installmentCount').value = '1';
+      document.getElementById('form-paidInstallments').value = '0';
+      toggleInstallmentFields();
+    }
+
+    function renderFormState() {
+      const allowedTeams = ROLE_PERMISSIONS[currentUser];
+      const tc = document.getElementById('team-buttons-container');
+      const noteEl = document.getElementById('team-restriction-note');
+      
+      tc.innerHTML = '';
+      
+      if (allowedTeams.length < TEAMS.length) {
+        noteEl.classList.remove('hidden');
+      } else {
+        noteEl.classList.add('hidden');
+      }
+
+      TEAMS.forEach(team => {
+        const hasAccess = allowedTeams.includes(team);
+        const isActive = state.formData.team === team;
+        
+        let btnClass = '';
+        let disabledAttr = '';
+        
+        if (!hasAccess) {
+          btnClass = 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60';
+          disabledAttr = 'disabled';
+        } else if (isActive) {
+          btnClass = 'bg-emerald-50 border-emerald-500 text-emerald-700 font-medium shadow-sm';
+        } else {
+          btnClass = 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 cursor-pointer';
+        }
+        
+        tc.innerHTML += `<button type="button" ${disabledAttr} onclick="setTeam('${team}')" class="py-2 px-3 text-sm rounded-lg border transition-all ${btnClass}">${team} ${!hasAccess ? '🔒' : ''}</button>`;
+      });
+
+      const ac = document.getElementById('attachments-container');
+      ac.innerHTML = '';
+      ATTACHMENT_TYPES.forEach(type => {
+        const fileData = state.formData.attachments[type];
+        const fileName = fileData ? fileData.name : null;
+        const isExt = fileData ? fileData.isExternalLink : false;
+        const fileUrl = fileData && fileData.url !== '#' ? fileData.url : null;
+        
+        let rightSide = fileName ? 
+          `<button type="button" onclick="removeAttachment('${type}')" class="text-xs flex items-center px-2 py-1.5 text-red-600 hover:bg-red-50 rounded-md transition font-medium"><i data-lucide="x" class="w-3.5 h-3.5 mr-1"></i> ลบ</button>` : 
+          `<div class="flex space-x-2">
+             <label class="cursor-pointer text-xs flex items-center px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md transition font-medium shadow-sm"><i data-lucide="upload-cloud" class="w-3.5 h-3.5 mr-1.5 text-slate-500"></i> อัปโหลด<input type="file" class="hidden" onchange="handleFileChange(event, '${type}')" accept=".pdf,image/*" /></label>
+             <button type="button" onclick="handleUrlChange('${type}')" class="cursor-pointer text-xs flex items-center px-3 py-1.5 bg-white border border-slate-300 text-blue-600 hover:bg-blue-50 rounded-md transition font-medium shadow-sm"><i data-lucide="link" class="w-3.5 h-3.5 mr-1.5 text-blue-500"></i> วางลิงก์</button>
+           </div>`;
+
+        const iconHTML = isExt 
+            ? '<i data-lucide="link" class="w-4.5 h-4.5"></i>' 
+            : '<i data-lucide="file-text" class="w-4.5 h-4.5"></i>';
+
+        ac.innerHTML += `
+          <div class="flex items-center justify-between p-3 border border-slate-200 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition">
+            <div class="flex items-center space-x-3">
+              <div class="p-2 rounded-lg ${fileName ? (isExt ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600') : 'bg-slate-100 text-slate-400'}">
+                ${iconHTML}
+              </div>
+              <div>
+                <p class="text-sm font-medium text-slate-700">${type}</p>
+                ${fileName ? 
+                  (fileUrl ? 
+                    `<a href="${fileUrl}" target="_blank" class="text-xs ${isExt ? 'text-blue-500 hover:text-blue-700' : 'text-emerald-600 hover:text-emerald-700'} hover:underline flex items-center mt-0.5"><span class="truncate max-w-[150px] md:max-w-[200px]">${fileName}</span></a>` 
+                    : 
+                    `<p class="text-xs ${isExt ? 'text-blue-500' : 'text-emerald-600'} flex items-center mt-0.5"><span class="truncate max-w-[150px] md:max-w-[200px]">${fileName}</span></p>`
+                  ) 
+                  : `<p class="text-xs text-slate-400 mt-0.5">ยังไม่ได้แนบไฟล์</p>`}
+              </div>
+            </div>
+            <div>${rightSide}</div>
+          </div>
+        `;
+      });
+      lucide.createIcons();
+    }
+
+    function setTeam(team) {
+      if (ROLE_PERMISSIONS[currentUser].includes(team)) {
+        state.formData.team = team;
+        renderFormState();
+      }
+    }
+
+    // --- ฟังก์ชันอัปโหลดไฟล์ตัวใหม่ ---
+    async function handleFileChange(event, type) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const isImage = file.type.startsWith('image/');
+      
+      // แสดงสถานะ "กำลังอัปโหลด" ให้ผู้ใช้ทราบ
+      const labelEl = event.target.closest('label');
+      if (labelEl) {
+         labelEl.innerHTML = '<i data-lucide="loader" class="w-3.5 h-3.5 mr-1.5 animate-spin"></i> อัปโหลด...';
+         labelEl.style.pointerEvents = 'none';
+         lucide.createIcons();
+      }
+
+      try {
+        // 1. สร้างชื่อไฟล์และตำแหน่งที่จะเก็บบน Firebase Storage
+        const fileName = `${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, `expenses_attachments/${fileName}`);
+        
+        // 2. อัปโหลดไฟล์ขึ้นไปบน Cloud
+        await uploadBytes(storageRef, file);
+        
+        // 3. ขอ URL สำหรับดาวน์โหลดไฟล์นั้นกลับมา
+        const downloadURL = await getDownloadURL(storageRef);
+        
+        // 4. นำ URL ที่ได้ไปเก็บใน State เพื่อรอเซฟลง Firestore
+        state.formData.attachments[type] = {
+          name: file.name,
+          url: downloadURL, 
+          isImage: isImage,
+          isExternalLink: false
+        };
+        renderFormState();
+      } catch (error) {
+        console.error("Upload Error: ", error);
+        showAlertModal('อัปโหลดล้มเหลว', 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์ (ตรวจสอบว่าได้ตั้งค่า Storage ในโหมดทดสอบแล้วหรือยัง)', true);
+        renderFormState(); // คืนค่าปุ่มให้กลับมาเป็นแบบเดิม
+      }
+    }
+
+    // --- ฟังก์ชันเพิ่มลิงก์แนบโดยตรง (Google Drive / OneDrive) ---
+    function handleUrlChange(type) {
+      showPromptModal(
+        `วางลิงก์สำหรับ ${type}`,
+        `<span class="text-xs text-amber-600">* ข้อควรระวัง: อย่าลืมตั้งค่าสิทธิ์ของไฟล์ใน Drive เป็น "Anyone with the link" ด้วยนะครับ</span>`,
+        'https://...',
+        (url) => {
+          if (url && url.trim() !== '') {
+            state.formData.attachments[type] = {
+              name: `[Link] แนบจากภายนอก`,
+              url: url.trim(),
+              isImage: false,
+              isExternalLink: true
+            };
+            renderFormState();
+          }
+        }
+      );
+    }
+
+    function removeAttachment(type) {
+      delete state.formData.attachments[type];
+      renderFormState();
+    }
+
+    // --- Detail Modal Functions ---
+    function openDetailModal(id) {
+      const exp = expenses.find(e => e.id === id);
+      if(!exp) return;
+
+      let attachmentsHTML = '<p class="text-sm text-slate-400">- ไม่มีไฟล์แนบ -</p>';
+      if(exp.attachments && Object.keys(exp.attachments).length > 0) {
+        attachmentsHTML = '<div class="space-y-2">';
+        for(const [type, data] of Object.entries(exp.attachments)) {
+          const name = data.name || data;
+          const url = data.url || '#';
+          const isImage = data.isImage || false;
+          const isExternalLink = data.isExternalLink ? true : false;
+          
+          const iconHTML = isExternalLink 
+                ? '<i data-lucide="link" class="w-4 h-4 mr-2 text-blue-500 flex-shrink-0"></i>'
+                : '<i data-lucide="paperclip" class="w-4 h-4 mr-2 text-emerald-600 flex-shrink-0"></i>';
+
+          attachmentsHTML += `
+            <div class="flex items-center justify-between text-sm border border-slate-200 p-2.5 rounded-lg bg-white shadow-sm">
+              <div class="flex items-center overflow-hidden">
+                ${iconHTML}
+                <span class="font-medium text-slate-600 mr-2 flex-shrink-0">${type}:</span>
+                ${url !== '#' ? `<a href="${url}" target="_blank" class="text-slate-800 hover:text-emerald-600 hover:underline truncate" title="${name}">${name}</a>` : `<span class="text-slate-800 truncate" title="${name}">${name}</span>`}
+              </div>
+              <div class="flex items-center space-x-2 flex-shrink-0 ml-2">
+                <button onclick="openPreviewModal('${url}', '${name}', ${isImage}, ${isExternalLink})" class="${isExternalLink ? 'text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700' : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700'} transition flex items-center px-2 py-1 rounded-md text-xs font-medium" title="ดูตัวอย่าง">
+                  ${isExternalLink ? '<i data-lucide="external-link" class="w-3.5 h-3.5 mr-1"></i> เปิดดู' : '<i data-lucide="eye" class="w-3.5 h-3.5 mr-1"></i> ดู'}
+                </button>
+                <a href="${url}" download="${name}" target="_blank" class="text-slate-400 hover:text-emerald-600 transition p-1" title="ดาวน์โหลด/ไปยังลิงก์">
+                  <i data-lucide="download" class="w-4 h-4"></i>
+                </a>
+              </div>
+            </div>`;
+        }
+        attachmentsHTML += '</div>';
+      }
+
+      let installmentInfo = '';
+      if (exp.isInstallment) {
+          const monthly = exp.amount / exp.installmentCount;
+          const paidAmount = monthly * exp.paidInstallments;
+          const remainingAmount = exp.amount - paidAmount;
+          const remainingInst = exp.installmentCount - exp.paidInstallments;
+          const progressPercent = exp.installmentCount > 0 ? (exp.paidInstallments / exp.installmentCount) * 100 : 0;
+          
+          installmentInfo = `
+          <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-5">
+              <h4 class="text-sm font-semibold text-indigo-800 mb-3 flex items-center"><i data-lucide="layers" class="w-4 h-4 mr-1.5"></i> สรุปข้อมูลการแบ่งชำระ (Installment)</h4>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                  <div>
+                      <p class="text-indigo-600/70 text-[11px] mb-0.5">ชำระต่องวด</p>
+                      <p class="font-bold text-indigo-900">${formatCurrency(monthly)}</p>
+                  </div>
+                  <div>
+                      <p class="text-indigo-600/70 text-[11px] mb-0.5">ความคืบหน้า</p>
+                      <p class="font-bold text-indigo-900">${exp.paidInstallments} / ${exp.installmentCount} งวด</p>
+                  </div>
+                  <div>
+                      <p class="text-emerald-600/80 text-[11px] mb-0.5">ชำระแล้วรวม</p>
+                      <p class="font-bold text-emerald-700">${formatCurrency(paidAmount)}</p>
+                  </div>
+                  <div>
+                      <p class="text-amber-600/80 text-[11px] mb-0.5">รอชำระคงเหลือ</p>
+                      <p class="font-bold text-amber-700">${formatCurrency(remainingAmount)} <span class="text-xs font-normal">(${remainingInst} งวด)</span></p>
+                  </div>
+              </div>
+              <div class="w-full bg-indigo-200/50 rounded-full h-1.5 mt-4">
+                  <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-1000" style="width: ${progressPercent}%"></div>
+              </div>
+          </div>
+          `;
+      }
+
+      const content = `
+        <div class="flex justify-between items-start mb-6">
+          <div>
+            <h3 class="text-xl font-bold text-slate-800 ${exp.status === 'ยกเลิก' ? 'line-through text-slate-400' : ''}">${exp.name}</h3>
+            <span class="inline-flex items-center mt-2 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700">${exp.team}</span>
+          </div>
+          <div class="text-right">
+            <div class="text-2xl font-bold ${exp.status === 'ยกเลิก' ? 'text-slate-400' : 'text-emerald-600'}">${formatCurrency(exp.amount)}</div>
+            <div class="mt-1.5">${getStatusBadgeHTML(exp.status)}</div>
+          </div>
+        </div>
+
+        ${installmentInfo}
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm mb-5">
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+            <p class="text-slate-500 text-xs mb-1">ร้านค้า/บริษัท (Vendor)</p>
+            <p class="font-medium text-slate-800 flex items-center">
+              <i data-lucide="store" class="w-4 h-4 mr-1.5 text-slate-400"></i> <span class="truncate" title="${exp.vendor || '-'}">${exp.vendor || '-'}</span>
+            </p>
+          </div>
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+            <p class="text-slate-500 text-xs mb-1">ช่วงเวลา (Period)</p>
+            <p class="font-medium text-slate-800">${formatDate(exp.periodStart)} - ${formatDate(exp.periodEnd)}</p>
+          </div>
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+            <p class="text-slate-500 text-xs mb-1">วิธีการชำระเงิน</p>
+            <p class="font-medium text-slate-800 flex items-center">
+              <i data-lucide="credit-card" class="w-4 h-4 mr-1.5 text-slate-400"></i> ${exp.paymentMethod}
+            </p>
+          </div>
+        </div>
+
+        ${exp.description ? `
+        <div class="mb-5">
+          <p class="text-slate-500 text-xs mb-1.5 font-medium">รายละเอียดเพิ่มเติม</p>
+          <p class="text-sm text-slate-800 bg-slate-50 p-3.5 rounded-xl border border-slate-100 leading-relaxed">${exp.description}</p>
+        </div>` : ''}
+
+        <div class="mb-2">
+          <p class="text-slate-500 text-xs mb-2 font-medium">เอกสารแนบ</p>
+          ${attachmentsHTML}
+        </div>
+        
+        <div class="mt-6 pt-4 border-t border-slate-100 text-right">
+             <p class="text-[11px] text-slate-400">บันทึกเมื่อ: ${formatDate(exp.createdAt)}</p>
+        </div>
+      `;
+
+      document.getElementById('detail-modal-content').innerHTML = content;
+
+      const modal = document.getElementById('detail-modal-container');
+      const modalBox = document.getElementById('detail-modal-box');
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        modalBox.classList.remove('scale-95');
+        modalBox.classList.add('scale-100');
+        lucide.createIcons();
+      }, 10);
+    }
+
+    function closeDetailModal() {
+      const modal = document.getElementById('detail-modal-container');
+      const modalBox = document.getElementById('detail-modal-box');
+      modal.classList.add('opacity-0');
+      modalBox.classList.remove('scale-100');
+      modalBox.classList.add('scale-95');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 300);
+    }
+
+    // --- อัปเดตฟังก์ชัน Preview ให้รองรับ External Links ข้ามระบบ ---
+    function openPreviewModal(url, name, isImage, isExternalLink = false) {
+      if (!url || url === '#') {
+        showAlertModal('ไม่สามารถเปิดดูได้', 'ไฟล์นี้เป็นข้อมูลเก่าที่ยังไม่มีการแนบไฟล์ที่ถูกต้องครับ', true);
+        return;
+      }
+      
+      // ถ้าระบุชัดเจนว่าเป็นลิงก์ภายนอก หรือ เป็น URL ของ Google Drive, OneDrive ให้เปิดแท็บใหม่แทน
+      // (เพราะเว็บพวกนี้จะตั้งค่าความปลอดภัยไม่ให้ดึงไปเปิดซ้อน iframe)
+      if (isExternalLink || url.includes('drive.google.com') || url.includes('1drv.ms') || url.includes('sharepoint.com')) {
+          window.open(url, '_blank');
+          return;
+      }
+
+      const container = document.getElementById('preview-modal-container');
+      const modalBox = document.getElementById('preview-modal-box');
+      const content = document.getElementById('preview-modal-content');
+      document.getElementById('preview-modal-title').innerText = name;
+
+      if(isImage) {
+          content.innerHTML = `<img src="${url}" alt="${name}" class="max-w-full max-h-[75vh] object-contain mx-auto rounded shadow-sm" />`;
+      } else {
+          content.innerHTML = `<iframe src="${url}" class="w-full h-[75vh] rounded border border-slate-200 bg-white"></iframe>`;
+      }
+
+      container.classList.remove('hidden');
+      setTimeout(() => {
+          container.classList.remove('opacity-0');
+          modalBox.classList.remove('scale-95');
+          modalBox.classList.add('scale-100');
+          lucide.createIcons();
+      }, 10);
+    }
+
+    function closePreviewModal() {
+      const container = document.getElementById('preview-modal-container');
+      const modalBox = document.getElementById('preview-modal-box');
+      
+      container.classList.add('opacity-0');
+      modalBox.classList.remove('scale-100');
+      modalBox.classList.add('scale-95');
+      
+      setTimeout(() => {
+          container.classList.add('hidden');
+          document.getElementById('preview-modal-content').innerHTML = ''; 
+      }, 300);
+    }
+
+    // --- Actions (อัปเดต Database จริง) ---
+    function handleDuplicate(id) {
+      const exp = expenses.find(e => e.id === id);
+      if(!exp) return;
+      
+      state.formData.team = exp.team;
+      state.formData.attachments = {}; 
+      
+      openModal();
+      
+      setTimeout(() => {
+        document.getElementById('form-name').value = exp.name + " (Copy)";
+        document.getElementById('form-vendor').value = exp.vendor || '';
+        document.getElementById('form-description').value = exp.description || '';
+        document.getElementById('form-periodStart').value = exp.periodStart;
+        document.getElementById('form-periodEnd').value = exp.periodEnd;
+        document.getElementById('form-amount').value = exp.amount;
+        document.getElementById('form-paymentMethod').value = exp.paymentMethod;
+        document.getElementById('form-status').value = exp.status;
+        
+        document.getElementById('form-isInstallment').checked = exp.isInstallment || false;
+        document.getElementById('form-installmentCount').value = exp.installmentCount || 1;
+        document.getElementById('form-paidInstallments').value = exp.paidInstallments || 0;
+        toggleInstallmentFields();
+      }, 50);
+    }
+
+    function handleDelete(id) {
+      const exp = expenses.find(e => e.id === id);
+      if(!exp) return;
+      
+      showConfirmModal(
+        'ยืนยันการลบรายการ',
+        `คุณต้องการลบรายการ "${exp.name}" ใช่หรือไม่?\n(ทีม: ${exp.team}, จำนวนเงิน: ${formatCurrency(exp.amount)})`,
+        async () => {
+          try {
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expenses', id));
+            addLog('DELETE', exp.name, `ลบข้อมูลค่าใช้จ่ายของทีม ${exp.team}`);
+          } catch (error) {
+            console.error("Error deleting document: ", error);
+            showAlertModal('ลบล้มเหลว', 'เกิดข้อผิดพลาดในการลบข้อมูล กรุณาลองใหม่อีกครั้ง', true);
+          }
+        }
+      );
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submit-btn');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 mr-2 animate-spin"></i> กำลังบันทึก...';
+        lucide.createIcons();
+      }
+
+      const isInstallment = document.getElementById('form-isInstallment').checked;
+      
+      const formPayload = {
+        team: state.formData.team,
+        name: document.getElementById('form-name').value,
+        vendor: document.getElementById('form-vendor').value.trim(),
+        description: document.getElementById('form-description').value,
+        periodStart: document.getElementById('form-periodStart').value,
+        periodEnd: document.getElementById('form-periodEnd').value,
+        amount: parseFloat(document.getElementById('form-amount').value),
+        paymentMethod: document.getElementById('form-paymentMethod').value,
+        status: document.getElementById('form-status').value,
+        isInstallment: isInstallment,
+        installmentCount: isInstallment ? parseInt(document.getElementById('form-installmentCount').value) || 1 : 1,
+        paidInstallments: isInstallment ? parseInt(document.getElementById('form-paidInstallments').value) || 0 : 0,
+        attachments: { ...state.formData.attachments }
+      };
+
+      const docId = state.editingId ? state.editingId : Date.now().toString();
+      const existingRecord = expenses.find(e => e.id === state.editingId);
+      
+      const newExpense = {
+        ...formPayload,
+        createdAt: state.editingId && existingRecord ? existingRecord.createdAt : new Date().toISOString().split('T')[0]
+      };
+
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expenses', docId), newExpense);
+        
+        if (state.editingId) {
+          addLog('EDIT', formPayload.name, `อัปเดตข้อมูล ทีม ${formPayload.team}`);
+        } else {
+          addLog('CREATE', formPayload.name, `เพิ่มค่าใช้จ่ายใหม่ ทีม ${formPayload.team} (${formatCurrency(formPayload.amount)})`);
+        }
+      } catch (error) {
+        console.error("Error writing document: ", error);
+        showAlertModal('บันทึกล้มเหลว', 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง', true);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = 'บันทึกข้อมูล';
+        }
+        closeModal();
+      }
+    }
+
+    document.addEventListener('click', function(event) {
+        const dropdownContainer = document.getElementById('month-filter-container');
+        if (state.isMonthDropdownOpen && dropdownContainer && !dropdownContainer.contains(event.target)) {
+            state.isMonthDropdownOpen = false;
+            renderApp();
+        }
+    });
+
+    // --- Custom Modal UI Functions ---
+    let confirmCallback = null;
+
+    function showAlertModal(title, message, isError = false) {
+      const container = document.getElementById('dialog-modal-container');
+      const box = document.getElementById('dialog-modal-box');
+      const iconContainer = document.getElementById('dialog-icon-container');
+      const icon = document.getElementById('dialog-icon');
+      
+      document.getElementById('dialog-title').innerText = title;
+      document.getElementById('dialog-message').innerHTML = message.replace(/\n/g, '<br/>');
+      
+      if (isError) {
+        iconContainer.className = 'flex items-center justify-center w-12 h-12 rounded-full mb-4 mx-auto bg-red-100 text-red-600';
+        icon.setAttribute('data-lucide', 'alert-triangle');
+      } else {
+        iconContainer.className = 'flex items-center justify-center w-12 h-12 rounded-full mb-4 mx-auto bg-blue-100 text-blue-600';
+        icon.setAttribute('data-lucide', 'info');
+      }
+      
+      document.getElementById('dialog-buttons').innerHTML = `
+        <button onclick="closeDialogModal()" class="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition w-full">ตกลง</button>
+      `;
+
+      showDialog(container, box);
+    }
+
+    function showConfirmModal(title, message, onConfirm) {
+      confirmCallback = onConfirm;
+      const container = document.getElementById('dialog-modal-container');
+      const box = document.getElementById('dialog-modal-box');
+      const iconContainer = document.getElementById('dialog-icon-container');
+      const icon = document.getElementById('dialog-icon');
+      
+      document.getElementById('dialog-title').innerText = title;
+      document.getElementById('dialog-message').innerHTML = message.replace(/\n/g, '<br/>');
+      
+      iconContainer.className = 'flex items-center justify-center w-12 h-12 rounded-full mb-4 mx-auto bg-red-100 text-red-600';
+      icon.setAttribute('data-lucide', 'trash-2');
+      
+      document.getElementById('dialog-buttons').innerHTML = `
+        <button onclick="closeDialogModal()" class="px-5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition w-full">ยกเลิก</button>
+        <button onclick="executeConfirm()" class="px-5 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition w-full">ยืนยันลบ</button>
+      `;
+
+      showDialog(container, box);
+    }
+
+    function showPromptModal(title, message, placeholder, onConfirm) {
+      confirmCallback = onConfirm;
+      const container = document.getElementById('dialog-modal-container');
+      const box = document.getElementById('dialog-modal-box');
+      const iconContainer = document.getElementById('dialog-icon-container');
+      const icon = document.getElementById('dialog-icon');
+      
+      document.getElementById('dialog-title').innerText = title;
+      document.getElementById('dialog-message').innerHTML = `
+        <p class="mb-3">${message}</p>
+        <input type="url" id="dialog-prompt-input" placeholder="${placeholder}" class="w-full bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 outline-none transition-shadow" />
+      `;
+      
+      iconContainer.className = 'flex items-center justify-center w-12 h-12 rounded-full mb-4 mx-auto bg-emerald-100 text-emerald-600';
+      icon.setAttribute('data-lucide', 'link');
+      
+      document.getElementById('dialog-buttons').innerHTML = `
+        <button onclick="closeDialogModal()" class="px-5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition w-full">ยกเลิก</button>
+        <button onclick="executePrompt()" class="px-5 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition w-full">บันทึกลิงก์</button>
+      `;
+
+      showDialog(container, box);
+    }
+
+    function executeConfirm() {
+      if (confirmCallback) confirmCallback();
+      closeDialogModal();
+    }
+
+    function executePrompt() {
+      const val = document.getElementById('dialog-prompt-input').value;
+      if (confirmCallback) confirmCallback(val);
+      closeDialogModal();
+    }
+
+    function showDialog(container, box) {
+      container.classList.remove('hidden');
+      setTimeout(() => {
+          container.classList.remove('opacity-0');
+          box.classList.remove('scale-95');
+          box.classList.add('scale-100');
+          lucide.createIcons();
+      }, 10);
+    }
+
+    function closeDialogModal() {
+      const container = document.getElementById('dialog-modal-container');
+      const box = document.getElementById('dialog-modal-box');
+      container.classList.add('opacity-0');
+      box.classList.remove('scale-100');
+      box.classList.add('scale-95');
+      setTimeout(() => {
+          container.classList.add('hidden');
+          confirmCallback = null;
+      }, 300);
+    }
+
+    Object.assign(window, {
+      switchUser, openModal, closeModal, setActiveTab, handleSearch,
+      toggleMonthDropdown, toggleAllMonths, toggleMonthSelection,
+      removeAttachment, handleFileChange, handleUrlChange, setTeam, openDetailModal,
+      closeDetailModal, openPreviewModal, closePreviewModal,
+      handleDuplicate, handleDelete, handleSubmit, exportToCSV,
+      toggleInstallmentFields, closeDialogModal, executeConfirm, executePrompt,
+      handleListFilterChange, clearListFilters
+    });
+
+    window.onload = () => {
+    };
+
+  </script>
+</body>
+</html>
